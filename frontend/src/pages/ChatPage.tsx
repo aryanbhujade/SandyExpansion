@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GradientBarsBackground } from '@/components/ui/gradient-bars-background';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, User, Bot, Sparkles, Search, Users, Code, Lightbulb, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Send, User, Bot, Sparkles, Search, Users, Code, Lightbulb, RotateCcw, Mail, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion, type Variants } from 'framer-motion';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
@@ -22,7 +22,7 @@ const suggestionChips = [
 
 export default function ChatPage() {
   const navigate = useNavigate();
-  const { messages, isTyping, sendMessage, clearChat, backendAvailable } = useChatContext();
+  const { messages, isTyping, sendMessage, confirmRecommendation, clearChat, backendAvailable } = useChatContext();
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -124,16 +124,18 @@ export default function ChatPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-zinc-500 hover:text-emerald-400 hover:bg-emerald-950/20 rounded-full h-8 w-8 transition-colors"
-                        onClick={clearChat}
-                      >
-                        <RotateCcw size={14} />
-                      </Button>
-                    </TooltipTrigger>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-zinc-500 hover:text-emerald-400 hover:bg-emerald-950/20 rounded-full h-8 w-8 transition-colors"
+                          onClick={clearChat}
+                        >
+                          <RotateCcw size={14} />
+                        </Button>
+                      }
+                    />
                     <TooltipContent side="bottom" className="bg-zinc-900 border-zinc-700 text-zinc-300 text-xs">
                       Clear chat
                     </TooltipContent>
@@ -187,6 +189,42 @@ export default function ChatPage() {
                                 : <span key={i}>{part}</span>
                             )}
                           </div>
+
+                          {message.role === 'bot' && message.confirmationPrompt && message.recommendationId && message.notificationStatus !== 'sent' && (
+                            <div className="mt-4 rounded-xl border border-emerald-500/20 bg-black/25 p-3">
+                              <p className="text-xs leading-relaxed text-emerald-100/85">
+                                {message.confirmationPrompt}
+                              </p>
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="h-8 rounded-full bg-emerald-500 px-3 text-xs font-semibold text-black hover:bg-emerald-400 disabled:opacity-60"
+                                  disabled={message.notificationStatus === 'sending'}
+                                  onClick={() => confirmRecommendation(message.id, message.recommendationId!)}
+                                >
+                                  {message.notificationStatus === 'sending' ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                                  )}
+                                  {message.notificationStatus === 'sending' ? 'Notifying...' : 'Notify contact'}
+                                </Button>
+                                {message.notificationStatus === 'error' && (
+                                  <span className="inline-flex items-center text-xs text-amber-300">
+                                    <AlertCircle className="mr-1 h-3.5 w-3.5" />
+                                    {message.notificationMessage}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {message.role === 'bot' && message.notificationStatus === 'sent' && (
+                            <div className="mt-4 inline-flex max-w-full items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200">
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>{message.notificationMessage}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </motion.div>

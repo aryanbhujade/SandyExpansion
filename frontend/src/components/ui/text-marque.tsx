@@ -51,7 +51,7 @@ const TextMarque = forwardRef<HTMLDivElement, ComponentProps>(({
     return () => clearTimeout(timer);
   }, [delay]);
 
-  useAnimationFrame((t, delta) => {
+  useAnimationFrame((_t, delta) => {
     if (!hasStarted.current) return;
 
     let moveBy = directionFactor.current * baseVelocity * (delta / 1000);

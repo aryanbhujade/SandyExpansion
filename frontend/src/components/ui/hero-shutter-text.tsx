@@ -1,8 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RefreshCw } from "lucide-react";
 
 interface HeroTextProps {
   text?: string;
@@ -15,7 +13,7 @@ export default function HeroText({
   className = "",
   textClassName = "text-5xl md:text-7xl lg:text-8xl",
 }: HeroTextProps) {
-  const [count, setCount] = useState(0);
+  const count = 0;
   // Split by words to allow natural wrapping, then map characters within words
   const words = text.split(" ");
 

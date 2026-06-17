@@ -40,6 +40,7 @@ export interface ChatRequest {
 }
 
 export interface RecommendationItem {
+  recommendation_id?: number;
   employee_id: string;
   name: string;
   designation: string;
@@ -54,6 +55,26 @@ export interface ChatResponse {
   domain: string;
   recommendations: RecommendationItem[];
   session_id: string;
+  confirmation_required?: boolean;
+  confirmation_prompt?: string | null;
+}
+
+export interface ConfirmRecommendationResponse {
+  status: string;
+  message: string;
+  contact_request: {
+    contact_request_id: number;
+    recommendation_id: number;
+    topic: string | null;
+    recommended_employee_id: string;
+    status: string;
+    notification_message: string;
+    notification?: {
+      recipient_email: string | null;
+      subject: string;
+      status: string;
+    };
+  };
 }
 
 // ---------- Notifications ----------
@@ -79,6 +100,12 @@ export interface Message {
   content: string;
   recommendations?: RecommendationItem[];
   domain?: string;
+  confirmationRequired?: boolean;
+  confirmationPrompt?: string | null;
+  recommendationId?: number;
+  contactRequestId?: number;
+  notificationStatus?: 'idle' | 'sending' | 'sent' | 'error';
+  notificationMessage?: string;
   timestamp: Date;
 }
 

@@ -14,6 +14,7 @@ interface ChatContextValue {
   isTyping: boolean;
   recommendations: RecommendationItem[];
   sendMessage: (text: string) => Promise<void>;
+  confirmRecommendation: (messageId: string, recommendationId: number) => Promise<void>;
   clearChat: () => void;
   backendAvailable: boolean | null; // null = not checked yet
 }
@@ -62,6 +63,11 @@ function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
+function stripConfirmationPrompt(content: string, prompt?: string | null): string {
+  if (!prompt) return content;
+  return content.replace(prompt, '').trim();
+}
+
 // ---------- Provider ----------
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
@@ -107,13 +113,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
         // Update session ID from server
         sessionIdRef.current = response.session_id;
+        const firstConfirmableRecommendation = response.recommendations.find(
+          recommendation => recommendation.recommendation_id
+        );
+        const confirmationRequired = Boolean(
+          response.confirmation_required && firstConfirmableRecommendation?.recommendation_id
+        );
 
         const botMsg: Message = {
           id: `bot-${Date.now()}`,
           role: 'bot',
-          content: response.message,
+          content: stripConfirmationPrompt(response.message, response.confirmation_prompt),
           recommendations: response.recommendations,
           domain: response.domain,
+          confirmationRequired,
+          confirmationPrompt: confirmationRequired ? response.confirmation_prompt : null,
+          recommendationId: firstConfirmableRecommendation?.recommendation_id,
+          notificationStatus: confirmationRequired ? 'idle' : undefined,
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, botMsg]);
@@ -152,6 +168,45 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isTyping, backendAvailable]);
 
+  const confirmRecommendation = useCallback(async (messageId: string, recommendationId: number) => {
+    setMessages(prev => prev.map(message =>
+      message.id === messageId
+        ? { ...message, notificationStatus: 'sending', notificationMessage: undefined }
+        : message
+    ));
+
+    try {
+      const response = await chatApi.confirmRecommendation(recommendationId);
+      const recipientEmail = response.contact_request.notification?.recipient_email;
+      const statusMessage = recipientEmail
+        ? `Notification queued to ${recipientEmail}.`
+        : response.message;
+
+      setMessages(prev => prev.map(message =>
+        message.id === messageId
+          ? {
+              ...message,
+              contactRequestId: response.contact_request.contact_request_id,
+              confirmationRequired: false,
+              notificationStatus: 'sent',
+              notificationMessage: statusMessage,
+            }
+          : message
+      ));
+    } catch (error) {
+      console.warn('[ChatContext] Recommendation confirmation failed:', error);
+      setMessages(prev => prev.map(message =>
+        message.id === messageId
+          ? {
+              ...message,
+              notificationStatus: 'error',
+              notificationMessage: 'I could not notify the contact. Please try again.',
+            }
+          : message
+      ));
+    }
+  }, []);
+
   const clearChat = useCallback(() => {
     sessionIdRef.current = generateSessionId();
     setMessages([
@@ -173,6 +228,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         isTyping,
         recommendations,
         sendMessage,
+        confirmRecommendation,
         clearChat,
         backendAvailable,
       }}

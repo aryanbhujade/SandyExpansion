@@ -7,6 +7,7 @@ import axios, { type AxiosInstance } from 'axios';
 import type {
   ChatRequest,
   ChatResponse,
+  ConfirmRecommendationResponse,
   Employee,
   EmployeeFilters,
   Notification,
@@ -16,6 +17,7 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const REQUESTER_ID = import.meta.env.VITE_DEFAULT_REQUESTER_ID || 'EMP0001';
+const REQUESTER_NAME = import.meta.env.VITE_DEFAULT_REQUESTER_NAME || 'Aryan';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -53,6 +55,20 @@ export const chatApi = {
     const { data } = await apiClient.get('/api/chat/history', {
       params: { session_id: sessionId },
     });
+    return data;
+  },
+
+  async confirmRecommendation(
+    recommendationId: number,
+    requesterName?: string
+  ): Promise<ConfirmRecommendationResponse> {
+    const { data } = await apiClient.post<ConfirmRecommendationResponse>(
+      `/recommendations/${recommendationId}/confirm`,
+      {
+        requester_name: requesterName || REQUESTER_NAME,
+        notification_channel: 'email',
+      }
+    );
     return data;
   },
 };

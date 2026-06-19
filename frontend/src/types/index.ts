@@ -94,6 +94,12 @@ export interface Notification {
 
 // ---------- UI Message (frontend-only) ----------
 
+export interface RecommendationNotificationState {
+  contactRequestId?: number;
+  status: 'idle' | 'sending' | 'sent' | 'error';
+  message?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'bot';
@@ -102,10 +108,7 @@ export interface Message {
   domain?: string;
   confirmationRequired?: boolean;
   confirmationPrompt?: string | null;
-  recommendationId?: number;
-  contactRequestId?: number;
-  notificationStatus?: 'idle' | 'sending' | 'sent' | 'error';
-  notificationMessage?: string;
+  recommendationStates?: Record<number, RecommendationNotificationState>;
   timestamp: Date;
 }
 

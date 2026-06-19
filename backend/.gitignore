@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 *.db
 .env
+.venv/
+sandyvenv/
+.DS_Store

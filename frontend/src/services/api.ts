@@ -123,7 +123,7 @@ export const healthApi = {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      await apiClient.get('/docs', { timeout: 3000 });
+      await apiClient.get('/health', { timeout: 3000 });
       return true;
     } catch {
       return false;

@@ -28,6 +28,7 @@ function generateMockResponse(userText: string): { message: string; recommendati
     message: `Great question! I found several experts related to "${userText}". Here are the top recommendations:\n\n• **Priya Sharma** — Senior Engineer, 5 years experience\n• **Alex Chen** — Tech Lead, contributed to 12 projects\n• **Jordan Lee** — Mentor, rated 4.9/5 by mentees\n\nWould you like more details about any of them?`,
     recommendations: [
       {
+        recommendation_id: 9001,
         employee_id: 'EMP0042',
         name: 'Priya Sharma',
         designation: 'Senior Consultant',
@@ -37,6 +38,7 @@ function generateMockResponse(userText: string): { message: string; recommendati
         reason: 'Subject Matter Expert with 5 years of hands-on experience.',
       },
       {
+        recommendation_id: 9002,
         employee_id: 'EMP0108',
         name: 'Alex Chen',
         designation: 'Lead Consultant',
@@ -46,6 +48,7 @@ function generateMockResponse(userText: string): { message: string; recommendati
         reason: 'Tech Lead who has contributed to 12 related projects.',
       },
       {
+        recommendation_id: 9003,
         employee_id: 'EMP0215',
         name: 'Jordan Lee',
         designation: 'Consultant',
@@ -66,6 +69,15 @@ function generateSessionId(): string {
 function stripConfirmationPrompt(content: string, prompt?: string | null): string {
   if (!prompt) return content;
   return content.replace(prompt, '').trim();
+}
+
+function createRecommendationStates(recommendations: RecommendationItem[]) {
+  return recommendations.reduce<Record<number, { status: 'idle' }>>((states, recommendation) => {
+    if (recommendation.recommendation_id !== undefined) {
+      states[recommendation.recommendation_id] = { status: 'idle' };
+    }
+    return states;
+  }, {});
 }
 
 // ---------- Provider ----------
@@ -113,11 +125,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
         // Update session ID from server
         sessionIdRef.current = response.session_id;
-        const firstConfirmableRecommendation = response.recommendations.find(
-          recommendation => recommendation.recommendation_id
+        const hasConfirmableRecommendations = response.recommendations.some(
+          recommendation => recommendation.recommendation_id !== undefined
         );
         const confirmationRequired = Boolean(
-          response.confirmation_required && firstConfirmableRecommendation?.recommendation_id
+          response.confirmation_required && hasConfirmableRecommendations
         );
 
         const botMsg: Message = {
@@ -128,8 +140,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           domain: response.domain,
           confirmationRequired,
           confirmationPrompt: confirmationRequired ? response.confirmation_prompt : null,
-          recommendationId: firstConfirmableRecommendation?.recommendation_id,
-          notificationStatus: confirmationRequired ? 'idle' : undefined,
+          recommendationStates: createRecommendationStates(response.recommendations),
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, botMsg]);
@@ -144,6 +155,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           role: 'bot',
           content: mock.message,
           recommendations: mock.recommendations,
+          recommendationStates: createRecommendationStates(mock.recommendations),
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, botMsg]);
@@ -159,6 +171,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         role: 'bot',
         content: mock.message,
         recommendations: mock.recommendations,
+        recommendationStates: createRecommendationStates(mock.recommendations),
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, botMsg]);
@@ -171,7 +184,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const confirmRecommendation = useCallback(async (messageId: string, recommendationId: number) => {
     setMessages(prev => prev.map(message =>
       message.id === messageId
-        ? { ...message, notificationStatus: 'sending', notificationMessage: undefined }
+        ? {
+            ...message,
+            recommendationStates: {
+              ...message.recommendationStates,
+              [recommendationId]: {
+                ...(message.recommendationStates?.[recommendationId] ?? { status: 'idle' }),
+                status: 'sending',
+                message: undefined,
+              },
+            },
+          }
         : message
     ));
 
@@ -186,10 +209,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         message.id === messageId
           ? {
               ...message,
-              contactRequestId: response.contact_request.contact_request_id,
-              confirmationRequired: false,
-              notificationStatus: 'sent',
-              notificationMessage: statusMessage,
+              recommendationStates: {
+                ...message.recommendationStates,
+                [recommendationId]: {
+                  contactRequestId: response.contact_request.contact_request_id,
+                  status: 'sent',
+                  message: statusMessage,
+                },
+              },
             }
           : message
       ));
@@ -199,8 +226,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         message.id === messageId
           ? {
               ...message,
-              notificationStatus: 'error',
-              notificationMessage: 'I could not notify the contact. Please try again.',
+              recommendationStates: {
+                ...message.recommendationStates,
+                [recommendationId]: {
+                  ...(message.recommendationStates?.[recommendationId] ?? { status: 'idle' }),
+                  status: 'error',
+                  message: 'I could not notify the contact. Please try again.',
+                },
+              },
             }
           : message
       ));

@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/.venv/
+backend/venv/
+*.egg-info/
+.eggs/
+
+# Environment files
+.env
+backend/.env
+frontend/.env
+
+# Databases
+*.db
+backend/sandy_connect.db
+backend/auth.db
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+backend/server.log
+
+# Gemini / Antigravity
+.gemini/

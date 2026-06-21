@@ -410,3 +410,225 @@ If desired, the next small follow-up would be:
 
 1. Remove the stale `/src/style.css` reference from `frontend/index.html`
 2. Optionally document local run steps in the root README for this exact repo layout
+
+---
+
+## Phase 2 — Authentication, Notifications, 1:1 Messaging & Chat Persistence
+
+Date: 2026-06-21
+
+### Scope
+
+This phase adds a full authentication system, in-app notification UI, direct 1:1 messaging between employees, employee directory API with filters, and chat history persistence.
+
+---
+
+### Backend — New Files
+
+#### `backend/app/auth.py`
+
+- JWT-based authentication system using `PyJWT` and `bcrypt`
+- Endpoints:
+  - `POST /api/auth/login` — email/password login, returns JWT + user profile
+  - `POST /api/auth/register` — register using existing employee profile, returns JWT
+  - `GET /api/auth/me` — returns current authenticated user from token
+- `get_current_user_dep` dependency used across all protected endpoints
+- Tokens expire after 7 days
+
+#### `backend/app/auth_database.py`
+
+- Separate SQLite database (`auth.db`) for user credentials
+- `UserCredential` model with `employee_id`, `email`, and `hashed_password`
+
+#### `backend/app/employees.py`
+
+- `GET /api/employees` — list employees with optional filters:
+  - `department`, `level`, `business_unit`, `location`, `search` (name)
+  - Pagination via `page` and `limit`
+- `GET /api/employees/{employee_id}` — single employee lookup
+
+#### `backend/app/messages.py`
+
+- `GET /api/messages/{employee_id}` — fetch direct messages between current user and target employee
+- `POST /api/messages/{employee_id}` — send a direct message
+- Self-messaging is blocked with a `400` error
+- Messages stored in `DirectMessage` table with sender, receiver, content, and timestamp
+
+#### `backend/app/notifications.py`
+
+- `GET /api/notifications` — fetch all notifications for the authenticated user
+- `PUT /api/notifications/{id}/read` — mark a notification as read (sets `read_at` timestamp)
+- Maps `OutgoingNotification` records to frontend-expected JSON shape
+
+#### `backend/seed_auth.py`
+
+- Seeds authentication credentials for all 15 employees
+- Default password for all accounts: `Password123!`
+
+### Backend — Modified Files
+
+#### `backend/app/database.py`
+
+- Added `session_id` column to `ChatMessage`
+- Added `read_at` column to `OutgoingNotification`
+- Added `DirectMessage` model for 1:1 messaging
+
+#### `backend/app/main.py`
+
+- Registered `auth_router`, `messages_router`, `employees_router`, `notifications_router`
+- Updated `POST /api/chat` to use JWT auth (`get_current_user_dep`)
+- Added `GET /api/chat/history` endpoint to fetch chat messages by `session_id`
+- `FrontendChatRequest` uses authenticated user profile instead of hardcoded requester
+
+#### `backend/requirements.txt`
+
+- Added `PyJWT`, `bcrypt`, `python-multipart` dependencies
+
+---
+
+### Frontend — New Files
+
+#### `frontend/src/context/AuthContext.tsx`
+
+- React context for authentication state
+- Stores user object and JWT token in `localStorage`
+- `useAuth()` hook provides `user`, `login`, `logout`, `loading`
+- Auto-restores session from stored token on mount via `GET /api/auth/me`
+
+#### `frontend/src/pages/SignInPage.tsx`
+
+- Email/password sign-in form
+- Calls `POST /api/auth/login`
+- Redirects to `/chat` on success
+
+#### `frontend/src/pages/SignUpPage.tsx`
+
+- Registration form (name, email, password)
+- Validates against existing employee profiles
+- Calls `POST /api/auth/register`
+
+#### `frontend/src/pages/HierarchyPage.tsx`
+
+- Employee directory/hierarchy browsing page
+
+### Frontend — Modified Files
+
+#### `frontend/src/pages/ChatPage.tsx`
+
+Major update with the following additions:
+
+- **Notification bell icon** in the header with unread count badge
+- **Notification slide-out panel** (right side) with:
+  - Topic, requester, channel, relative timestamp per notification
+  - "Mark read" button for unread notifications
+  - Animated entrance/exit via `AnimatePresence`
+  - Empty state when no notifications exist
+- **Notification auto-polling** every 30 seconds
+- **Sidebar self-exclusion** — logged-in user is filtered out of the Direct Messages list
+- **Dynamic header** — shows "Chat with {Name}" and recipient's role when in DM mode
+- **DM auto-polling** — fetches new messages every 5 seconds in DM conversations
+- **Context-aware input placeholder** — "Message {name}..." in DM mode vs bot prompt in AI mode
+- **Proper sender initials** — shows first letter of name in DM avatars
+- **Context-aware footer** — different help text for bot mode vs DM mode
+
+#### `frontend/src/context/ChatContext.tsx`
+
+- `sessionId` now **persisted in `localStorage`** under `internbot_session_id`
+- On mount, restores previous chat history from `GET /api/chat/history`
+- `clearChat()` generates a new session and persists it
+
+#### `frontend/src/services/api.ts`
+
+- Added `authApi` with `login`, `getMe`, and `register` methods
+- Added `notificationApi` with `list` and `markRead` methods
+- Added `messageApi` with `getMessages` and `sendMessage` methods
+- Added JWT token interceptor to Axios instance
+
+#### `frontend/src/types/index.ts`
+
+- Added `Notification` type
+- Added `ConfirmRecommendationResponse` type
+- Added `EmployeeFilters` type
+
+#### `frontend/src/App.tsx`
+
+- Added `AuthProvider` wrapper
+- Added `ProtectedRoute` component for auth-guarded pages
+- Added routes: `/signin`, `/signup`, `/hierarchy`
+
+#### `frontend/src/components/ui/splite.tsx`
+
+- Removed `React.lazy()` and `Suspense` wrapper from Spline 3D component
+- Direct import for reliable rendering
+
+#### `frontend/src/pages/LandingPage.tsx`
+
+- Changed Card container from `min-h-screen` to `h-screen` to fix Spline 3D rendering (child flex height calculation)
+
+---
+
+### Root — New Files
+
+#### `.gitignore`
+
+- Excludes: `node_modules/`, `.venv/`, `__pycache__/`, `*.db`, `.env`, `dist/`, `.vscode/`, `.DS_Store`, logs, `.gemini/`
+
+#### `mock_user_credentials.md`
+
+- Reference table of all 15 seeded test accounts with email/password
+
+---
+
+### Files Added (Phase 2)
+
+- `backend/app/auth.py`
+- `backend/app/auth_database.py`
+- `backend/app/employees.py`
+- `backend/app/messages.py`
+- `backend/app/notifications.py`
+- `backend/seed_auth.py`
+- `frontend/src/context/AuthContext.tsx`
+- `frontend/src/pages/SignInPage.tsx`
+- `frontend/src/pages/SignUpPage.tsx`
+- `frontend/src/pages/HierarchyPage.tsx`
+- `.gitignore`
+- `mock_user_credentials.md`
+
+### Files Modified (Phase 2)
+
+- `backend/app/database.py`
+- `backend/app/main.py`
+- `backend/requirements.txt`
+- `frontend/src/pages/ChatPage.tsx`
+- `frontend/src/context/ChatContext.tsx`
+- `frontend/src/services/api.ts`
+- `frontend/src/types/index.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/components/ui/splite.tsx`
+- `frontend/src/pages/LandingPage.tsx`
+
+---
+
+### Verification (Phase 2)
+
+- `npm run build` — 0 TypeScript errors, production build succeeds
+- Login flow verified via API (`POST /api/auth/login`)
+- Employee list verified — returns `E001`–`E015` with correct fields
+- Sidebar self-exclusion verified — logged-in user does not appear
+- Notification fetch/read verified — `GET /api/notifications`, `PUT /api/notifications/{id}/read`
+- DM send/receive verified — `POST /api/messages/{id}`, `GET /api/messages/{id}`
+- Chat history restore verified — `GET /api/chat/history?session_id=...`
+
+### Teammate Setup Additions (Phase 2)
+
+After completing the setup from Phase 1 above, also run:
+
+```bash
+cd backend
+.venv/bin/python seed_auth.py
+```
+
+This seeds login credentials for all 15 employees. See `mock_user_credentials.md` for the full list.
+
+All test accounts use the password: `Password123!`
+

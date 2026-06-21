@@ -2,6 +2,7 @@
 // Chat Context — shared state management for the chat feature.
 // Encapsulates messages, session, and API calls.
 // Falls back to mock responses when the backend is unreachable.
+// Persists sessionId in localStorage for chat history continuity.
 // ============================================================
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
@@ -21,6 +22,22 @@ interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
+// ---------- Session persistence ----------
+
+const SESSION_KEY = 'internbot_session_id';
+
+function generateSessionId(): string {
+  return `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function getOrCreateSessionId(): string {
+  const stored = localStorage.getItem(SESSION_KEY);
+  if (stored) return stored;
+  const newId = generateSessionId();
+  localStorage.setItem(SESSION_KEY, newId);
+  return newId;
+}
+
 // ---------- Mock fallback (used when backend is not running) ----------
 
 function generateMockResponse(userText: string): { message: string; recommendations: RecommendationItem[] } {
@@ -28,7 +45,6 @@ function generateMockResponse(userText: string): { message: string; recommendati
     message: `Great question! I found several experts related to "${userText}". Here are the top recommendations:\n\n• **Priya Sharma** — Senior Engineer, 5 years experience\n• **Alex Chen** — Tech Lead, contributed to 12 projects\n• **Jordan Lee** — Mentor, rated 4.9/5 by mentees\n\nWould you like more details about any of them?`,
     recommendations: [
       {
-        recommendation_id: 9001,
         employee_id: 'EMP0042',
         name: 'Priya Sharma',
         designation: 'Senior Consultant',
@@ -38,7 +54,6 @@ function generateMockResponse(userText: string): { message: string; recommendati
         reason: 'Subject Matter Expert with 5 years of hands-on experience.',
       },
       {
-        recommendation_id: 9002,
         employee_id: 'EMP0108',
         name: 'Alex Chen',
         designation: 'Lead Consultant',
@@ -48,7 +63,6 @@ function generateMockResponse(userText: string): { message: string; recommendati
         reason: 'Tech Lead who has contributed to 12 related projects.',
       },
       {
-        recommendation_id: 9003,
         employee_id: 'EMP0215',
         name: 'Jordan Lee',
         designation: 'Consultant',
@@ -59,11 +73,6 @@ function generateMockResponse(userText: string): { message: string; recommendati
       },
     ],
   };
-}
-
-function generateSessionId(): string {
-  // Simple UUID-like generator without external dependency
-  return `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 function stripConfirmationPrompt(content: string, prompt?: string | null): string {
@@ -94,21 +103,63 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isTyping, setIsTyping] = useState(false);
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
-  const sessionIdRef = useRef(generateSessionId());
+  const [sessionId, setSessionId] = useState(getOrCreateSessionId);
+  const inFlightRef = useRef(false);
 
   // Check backend availability on mount
   useEffect(() => {
     healthApi.isAvailable().then(setBackendAvailable);
   }, []);
 
+  // Restore chat history from backend on mount
+  useEffect(() => {
+    if (backendAvailable !== true) return;
+
+    chatApi.getHistory(sessionId)
+      .then(history => {
+        if (!history || history.length === 0) return;
+
+        const restoredMessages: Message[] = [
+          {
+            id: 'welcome',
+            role: 'bot',
+            content: 'Hello! I\'m InternBot 🤖 I can help you discover the right experts across your organization. Try asking me about specific technologies, projects, or skills!',
+            timestamp: new Date(),
+          },
+        ];
+
+        for (const entry of history) {
+          restoredMessages.push({
+            id: `restored-user-${entry.id}`,
+            role: 'user',
+            content: entry.message,
+            timestamp: new Date(entry.created_at),
+          });
+          restoredMessages.push({
+            id: `restored-bot-${entry.id}`,
+            role: 'bot',
+            content: entry.bot_response,
+            timestamp: new Date(entry.created_at),
+          });
+        }
+
+        setMessages(restoredMessages);
+      })
+      .catch(() => {
+        // Silently ignore restore errors
+      });
+  }, [backendAvailable, sessionId]);
+
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isTyping) return;
+    const cleanText = text.trim();
+    if (!cleanText || inFlightRef.current) return;
+    inFlightRef.current = true;
 
     // 1. Add user message immediately
     const userMsg: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: text.trim(),
+      content: cleanText,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMsg]);
@@ -116,15 +167,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setRecommendations([]);
 
     try {
-      if (backendAvailable) {
+      if (backendAvailable !== false) {
         // --- Real API call ---
         const response = await chatApi.sendMessage(
-          text.trim(),
-          sessionIdRef.current
+          cleanText,
+          sessionId
         );
 
-        // Update session ID from server
-        sessionIdRef.current = response.session_id;
+        // Update session ID from server and persist
+        setSessionId(response.session_id);
+        localStorage.setItem(SESSION_KEY, response.session_id);
+        setBackendAvailable(true);
         const hasConfirmableRecommendations = response.recommendations.some(
           recommendation => recommendation.recommendation_id !== undefined
         );
@@ -148,7 +201,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       } else {
         // --- Mock fallback ---
         await new Promise(resolve => setTimeout(resolve, 1500)); // simulate latency
-        const mock = generateMockResponse(text);
+        const mock = generateMockResponse(cleanText);
 
         const botMsg: Message = {
           id: `bot-${Date.now()}`,
@@ -164,7 +217,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       // Network error — fall back to mock
       console.warn('[ChatContext] API call failed, using mock fallback:', error);
-      const mock = generateMockResponse(text);
+      setBackendAvailable(false);
+      const mock = generateMockResponse(cleanText);
 
       const botMsg: Message = {
         id: `bot-${Date.now()}`,
@@ -177,9 +231,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages(prev => [...prev, botMsg]);
       setRecommendations(mock.recommendations);
     } finally {
+      inFlightRef.current = false;
       setIsTyping(false);
     }
-  }, [isTyping, backendAvailable]);
+  }, [backendAvailable, sessionId]);
 
   const confirmRecommendation = useCallback(async (messageId: string, recommendationId: number) => {
     setMessages(prev => prev.map(message =>
@@ -241,7 +296,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearChat = useCallback(() => {
-    sessionIdRef.current = generateSessionId();
+    const newSessionId = generateSessionId();
+    localStorage.setItem(SESSION_KEY, newSessionId);
+    setSessionId(newSessionId);
     setMessages([
       {
         id: 'welcome',
@@ -257,7 +314,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     <ChatContext.Provider
       value={{
         messages,
-        sessionId: sessionIdRef.current,
+        sessionId,
         isTyping,
         recommendations,
         sendMessage,

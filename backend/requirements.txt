@@ -4,3 +4,7 @@ pydantic
 requests
 python-dotenv
 sqlalchemy
+pyjwt
+bcrypt
+python-multipart
+dotenv

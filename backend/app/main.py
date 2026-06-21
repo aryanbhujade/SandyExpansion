@@ -15,6 +15,11 @@ from app.services.local_llm import get_llm_settings
 from app.services.recommendation_engine import recommend_contacts
 from app.services.request_analyser import analyse_user_request
 from app.services.seed_data import seed_database
+from app.auth import get_current_user_dep, router as auth_router
+from app.auth_database import init_auth_db
+from app.messages import router as messages_router
+from app.employees import router as employees_router
+from app.notifications import router as notifications_router
 
 app = FastAPI(title="Sandy Connect Backend", version="0.1.0")
 
@@ -26,6 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(messages_router, prefix="/api/messages", tags=["messages"])
+app.include_router(employees_router, prefix="/api/employees", tags=["employees"])
+app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"])
+
 
 class AskRequest(BaseModel):
     user_id: str | None = None
@@ -33,8 +43,9 @@ class AskRequest(BaseModel):
     user_level: str | None = None
     user_role: str | None = None
     user_department: str | None = None
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=4000)
     channel: str | None = None
+    session_id: str | None = None
 
 
 class FeedbackRequest(BaseModel):
@@ -52,7 +63,7 @@ class ConfirmRecommendationRequest(BaseModel):
 
 
 class FrontendChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=4000)
     requester_id: str | None = None
     session_id: str | None = None
 
@@ -60,6 +71,7 @@ class FrontendChatRequest(BaseModel):
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    init_auth_db()
 
 
 def _user_profile_from_request(request: AskRequest) -> dict[str, Any]:
@@ -75,6 +87,7 @@ def _user_profile_from_request(request: AskRequest) -> dict[str, Any]:
 
 def _store_interaction(db, request: AskRequest, analysis: dict, recommendations: dict, answer: str) -> dict:
     chat_message = ChatMessage(
+        session_id=request.session_id,
         user_name=request.user_name,
         user_level=request.user_level,
         user_role=request.user_role,
@@ -245,13 +258,21 @@ def feedback(request: FeedbackRequest, db=Depends(get_db)) -> dict[str, str]:
 
 
 @app.post("/api/chat")
-def frontend_chat(request: FrontendChatRequest, db=Depends(get_db)) -> dict:
+def frontend_chat(
+    request: FrontendChatRequest,
+    current_user: dict = Depends(get_current_user_dep),
+    db=Depends(get_db),
+) -> dict:
     """Compatibility wrapper for the existing frontend; uses the same Sandy pipeline."""
     ask_request = AskRequest(
-        user_id=request.requester_id,
-        user_name=request.requester_id,
+        user_id=current_user["employee_id"],
+        user_name=current_user["name"],
+        user_level=current_user.get("level"),
+        user_role=current_user.get("role"),
+        user_department=current_user.get("department"),
         message=request.message,
         channel="frontend",
+        session_id=request.session_id,
     )
     result = _run_sandy_pipeline(db, ask_request)
     recommendations = []
@@ -277,3 +298,30 @@ def frontend_chat(request: FrontendChatRequest, db=Depends(get_db)) -> dict:
         "confirmation_required": result.get("confirmation_required", False),
         "confirmation_prompt": result.get("confirmation_prompt"),
     }
+
+
+@app.get("/api/chat/history")
+def get_chat_history(
+    session_id: str,
+    current_user: dict = Depends(get_current_user_dep),
+    db=Depends(get_db),
+) -> list[dict]:
+    messages = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.session_id == session_id,
+            ChatMessage.user_name == current_user["name"],
+        )
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": msg.id,
+            "session_id": msg.session_id,
+            "message": msg.message,
+            "bot_response": msg.bot_response,
+            "created_at": msg.created_at,
+        }
+        for msg in messages
+    ]

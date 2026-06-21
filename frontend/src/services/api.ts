@@ -27,6 +27,34 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// Add interceptor to include JWT token
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('internbot_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// ---------- Auth API ----------
+
+export const authApi = {
+  async login(email: string, password: string) {
+    const { data } = await apiClient.post('/api/auth/login', { email, password });
+    return data;
+  },
+  
+  async getMe() {
+    const { data } = await apiClient.get('/api/auth/me');
+    return data;
+  },
+
+  async register(name: string, email: string, password: string) {
+    const { data } = await apiClient.post('/api/auth/register', { name, email, password });
+    return data;
+  }
+};
+
 // ---------- Chat API ----------
 
 export const chatApi = {
@@ -117,10 +145,6 @@ export const notificationApi = {
 // ---------- Health Check ----------
 
 export const healthApi = {
-  /**
-   * Check if the backend is reachable.
-   * Used to decide whether to use real API or mock fallback.
-   */
   async isAvailable(): Promise<boolean> {
     try {
       await apiClient.get('/health', { timeout: 3000 });
@@ -129,6 +153,28 @@ export const healthApi = {
       return false;
     }
   },
+};
+
+// ---------- Messages API ----------
+
+export interface DirectMessage {
+  id: number;
+  sender_id: string;
+  receiver_id: string;
+  message: string;
+  timestamp: string;
+}
+
+export const messageApi = {
+  async getMessages(employeeId: string): Promise<DirectMessage[]> {
+    const { data } = await apiClient.get<DirectMessage[]>(`/api/messages/${employeeId}`);
+    return data;
+  },
+  
+  async sendMessage(employeeId: string, message: string): Promise<DirectMessage> {
+    const { data } = await apiClient.post<DirectMessage>(`/api/messages/${employeeId}`, { message });
+    return data;
+  }
 };
 
 export default apiClient;

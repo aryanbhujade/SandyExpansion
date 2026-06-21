@@ -2,7 +2,7 @@ import { SplineScene } from "@/components/ui/splite"
 import { Card } from "@/components/ui/card"
 import { SpotlightHover } from "@/components/ui/spotlight-hover"
 import { Spotlight } from "@/components/ui/spotlight"
-import { HoverBorderGradient } from "@/components/ui/hover-border-gradient"
+import { Button } from "@/components/ui/button"
 import TextMarque from "@/components/ui/text-marque"
 import HeroText from "@/components/ui/hero-shutter-text"
 import { Badge } from "@/components/ui/badge"
@@ -43,8 +43,8 @@ export default function LandingPage() {
   const descriptionText = "InternBot helps employees discover the best people across the organization for technologies, projects, mentorship, and domain expertise using AI-powered recommendations."
 
   return (
-    <div className="w-full h-screen bg-black font-sans">
-      <Card className="w-full h-screen rounded-none border-none bg-black relative overflow-hidden flex flex-col md:flex-row">
+    <div className="w-full min-h-screen bg-black font-sans">
+      <Card className="w-full h-screen rounded-none border-none bg-black relative overflow-x-hidden flex flex-col md:flex-row">
 
         {/* Subtle emerald radial glow behind left content */}
         <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.04] blur-[120px] pointer-events-none" />
@@ -112,25 +112,23 @@ export default function LandingPage() {
 
             {/* CTA Buttons */}
             <motion.div variants={itemVariants} className="mt-10 flex flex-wrap gap-4 items-center">
-              <HoverBorderGradient
-                containerClassName="rounded-full"
-                as="button"
-                className="bg-black text-white px-8 flex items-center space-x-2"
-                onClick={() => navigate('/chat')}
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 h-12 flex items-center space-x-2"
+                onClick={() => navigate('/signin')}
               >
-                <BotMessageSquare className="w-4 h-4 mr-2 text-emerald-400" />
+                <BotMessageSquare className="w-4 h-4 mr-2" />
                 <span>Ask InternBot</span>
-                <ArrowRight className="w-4 h-4 ml-2 opacity-60 group-hover:opacity-100 transition-opacity" />
-              </HoverBorderGradient>
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
 
-              <HoverBorderGradient
-                containerClassName="rounded-full opacity-80"
-                as="button"
-                className="bg-zinc-900/50 hover:bg-black text-zinc-300 px-8 flex items-center space-x-2"
+              <Button
+                variant="outline"
+                className="border-white/10 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 rounded-full px-8 h-12 flex items-center space-x-2"
+                onClick={() => navigate('/hierarchy')}
               >
                 <Search className="w-4 h-4 mr-2 text-emerald-400/60" />
                 <span>Explore Experts</span>
-              </HoverBorderGradient>
+              </Button>
             </motion.div>
 
             {/* Separator */}

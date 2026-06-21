@@ -64,6 +64,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, index=True, nullable=True)
     user_name = Column(String, nullable=True, index=True)
     user_level = Column(String, nullable=True)
     user_role = Column(String, nullable=True)
@@ -134,6 +135,17 @@ class OutgoingNotification(Base):
     status = Column(String, nullable=False, default="sent_mock", index=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     sent_at = Column(DateTime, nullable=True)
+    read_at = Column(DateTime, nullable=True)
+
+
+class DirectMessage(Base):
+    __tablename__ = "direct_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    receiver_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    timestamp = Column(DateTime, nullable=False, default=utcnow)
 
 
 def init_db() -> None:

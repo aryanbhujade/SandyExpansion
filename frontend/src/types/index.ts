@@ -11,6 +11,7 @@ export interface SkillItem {
 }
 
 export interface Employee {
+  role: string;
   employee_id: string;     // "EMP0001"
   name: string;
   email: string;

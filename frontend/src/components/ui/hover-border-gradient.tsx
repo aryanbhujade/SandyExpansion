@@ -3,6 +3,13 @@ import React from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
+type HoverBorderGradientProps = React.PropsWithChildren<
+  React.HTMLAttributes<HTMLElement> & {
+    containerClassName?: string;
+    as?: React.ElementType;
+  }
+>;
+
 export function HoverBorderGradient({
   children,
   containerClassName,
@@ -10,7 +17,7 @@ export function HoverBorderGradient({
   as: Tag = "button",
   onClick,
   ...props
-}: React.PropsWithChildren<any>) {
+}: HoverBorderGradientProps) {
   return (
     <Tag
       onClick={onClick}

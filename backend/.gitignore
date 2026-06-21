@@ -1,7 +1,25 @@
 __pycache__/
 *.py[cod]
-*.db
-.env
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# Virtual environments
 .venv/
+venv/
 sandyvenv/
+
+# Environment
+.env
+
+# Databases
+*.db
+
+# Logs
+*.log
+server.log
+
+# OS
 .DS_Store
+Thumbs.db

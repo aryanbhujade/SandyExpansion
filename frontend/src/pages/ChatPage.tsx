@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
-  ArrowLeft,
+  LogOut,
+  Bell,
   Bot,
   CheckCircle2,
   Code,
@@ -15,15 +16,17 @@ import {
   Sparkles,
   User,
   Users,
+  X,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatContext } from '@/context/ChatContext';
-import type { Message, RecommendationItem, RecommendationNotificationState } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { employeeApi, messageApi, notificationApi, type DirectMessage } from '@/services/api';
+import type { Message, Notification, RecommendationItem, RecommendationNotificationState, Employee } from '@/types';
 
 const suggestionChips = [
   { icon: Search, text: 'Find React experts' },
@@ -60,6 +63,20 @@ function formatTime(timestamp: Date) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(timestamp);
+}
+
+function formatRelativeTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHrs = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHrs / 24);
+
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return `${diffDays}d ago`;
 }
 
 function recentUserPrompts(messages: Message[]) {
@@ -161,8 +178,117 @@ function RecommendationCard({
   );
 }
 
+// ==================== Notification Panel ====================
+
+function NotificationPanel({
+  notifications,
+  onMarkRead,
+  onClose,
+}: {
+  notifications: Notification[];
+  onMarkRead: (id: number) => void;
+  onClose: () => void;
+}) {
+  const unreadCount = notifications.filter((n) => !n.read_at).length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 20 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="absolute top-0 right-0 z-50 flex h-full w-full max-w-[400px] flex-col border-l border-white/8 bg-[#111112]/95 backdrop-blur-2xl"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <Bell className="h-5 w-5 text-emerald-400" />
+          <h3 className="text-base font-semibold text-white">Notifications</h3>
+          {unreadCount > 0 && (
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
+              {unreadCount} new
+            </span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Notification List */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3">
+        {notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="h-14 w-14 rounded-full bg-white/[0.03] flex items-center justify-center mb-4 border border-white/10">
+              <Bell className="h-6 w-6 text-zinc-500" />
+            </div>
+            <h4 className="text-sm font-medium text-zinc-300 mb-1">No notifications yet</h4>
+            <p className="text-xs text-zinc-500 max-w-[240px]">
+              You'll see notifications here when someone wants to connect with you.
+            </p>
+          </div>
+        ) : (
+          notifications.map((notif) => (
+            <motion.div
+              key={notif.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`rounded-2xl border p-4 transition-colors ${
+                notif.read_at
+                  ? 'border-white/4 bg-white/[0.01]'
+                  : 'border-emerald-500/15 bg-emerald-500/[0.03]'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  {!notif.read_at && (
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{notif.topic}</p>
+                    <p className="mt-1 text-xs text-zinc-400">
+                      {notif.requester_id ? `From: ${notif.requester_id}` : 'Contact request'}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {notif.channel === 'email' ? '📧 Email' : '🔔 In-app'} · {formatRelativeTime(notif.created_at)}
+                    </p>
+                  </div>
+                </div>
+                {!notif.read_at && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 rounded-full border border-white/8 bg-white/[0.03] px-2.5 text-[11px] text-zinc-400 hover:text-white hover:bg-white/[0.06]"
+                    onClick={() => onMarkRead(notif.id)}
+                  >
+                    Mark read
+                  </Button>
+                )}
+              </div>
+              {notif.read_at && (
+                <div className="mt-2 flex items-center gap-1 text-[11px] text-zinc-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Read</span>
+                </div>
+              )}
+            </motion.div>
+          ))
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ==================== Main ChatPage ====================
+
 export default function ChatPage() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const {
     messages,
     isTyping,
@@ -172,28 +298,208 @@ export default function ChatPage() {
     backendAvailable,
   } = useChatContext();
   const [inputValue, setInputValue] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const messageViewportRef = useRef<HTMLDivElement>(null);
+  const sidebarViewportRef = useRef<HTMLDivElement>(null);
+  const activeChatRef = useRef('bot');
+  const initialScrollEffectRef = useRef(true);
+  const messageRequestRef = useRef(0);
+  const forceNextScrollRef = useRef(false);
+  
+  const [activeChat, setActiveChat] = useState<string>('bot');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
+  const [directMessagesLoading, setDirectMessagesLoading] = useState(false);
+  const [directMessageError, setDirectMessageError] = useState('');
+  const [isSendingDirectMessage, setIsSendingDirectMessage] = useState(false);
+
+  // Notification state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+
+  const unreadNotificationCount = notifications.filter((n) => !n.read_at).length;
+
+  const isNearBottom = useCallback(() => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return true;
+    return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+  }, []);
+
+  // Fetch employees (exclude logged-in user)
+  useEffect(() => {
+    let cancelled = false;
+    employeeApi.list({ limit: 100 })
+      .then(data => {
+        if (!cancelled && user) {
+          setEmployees(data.filter(emp => emp.employee_id !== user.employee_id));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEmployees([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // Fetch notifications on mount + poll every 30s
+  useEffect(() => {
+    let cancelled = false;
+    const fetchNotifications = () => {
+      notificationApi.list()
+        .then(data => {
+          if (!cancelled) setNotifications(data);
+        })
+        .catch(() => {
+          // Silently ignore notification fetch errors
+        });
+    };
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // DM polling: fetch new messages every 5 seconds when in a DM conversation
+  useEffect(() => {
+    if (activeChat === 'bot') return;
+    const recipientId = activeChat;
+
+    const pollMessages = () => {
+      messageApi.getMessages(recipientId)
+        .then(data => {
+          if (activeChatRef.current === recipientId) {
+            setDirectMessages(prev => {
+              // Only update if there are new messages
+              if (data.length !== prev.length) return data;
+              // Check if last message ID differs
+              if (data.length > 0 && prev.length > 0 && data[data.length - 1].id !== prev[prev.length - 1].id) {
+                return data;
+              }
+              return prev;
+            });
+          }
+        })
+        .catch(() => {
+          // Silently ignore poll errors
+        });
+    };
+
+    const interval = setInterval(pollMessages, 5000);
+    return () => clearInterval(interval);
+  }, [activeChat]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isTyping]);
+    const frame = requestAnimationFrame(() => {
+      sidebarViewportRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+      messageViewportRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
-  const handleSendMessage = (text?: string) => {
+  useEffect(() => {
+    if (activeChatRef.current === activeChat) {
+      return;
+    }
+    activeChatRef.current = activeChat;
+    setInputValue('');
+    setDirectMessageError('');
+    forceNextScrollRef.current = true;
+
+    if (activeChat === 'bot') {
+      setDirectMessages([]);
+      setDirectMessagesLoading(false);
+      requestAnimationFrame(() => scrollToBottom('auto'));
+      return;
+    }
+
+    const requestId = ++messageRequestRef.current;
+    setDirectMessages([]);
+    setDirectMessagesLoading(true);
+    messageApi.getMessages(activeChat)
+      .then(data => {
+        if (requestId === messageRequestRef.current) setDirectMessages(data);
+      })
+      .catch(() => {
+        if (requestId === messageRequestRef.current) {
+          setDirectMessageError('Could not load this conversation. Please try again.');
+        }
+      })
+      .finally(() => {
+        if (requestId === messageRequestRef.current) setDirectMessagesLoading(false);
+      });
+  }, [activeChat, scrollToBottom]);
+
+  useEffect(() => {
+    if (initialScrollEffectRef.current) {
+      initialScrollEffectRef.current = false;
+      return;
+    }
+    if (!forceNextScrollRef.current && messages.length <= 1 && directMessages.length === 0) {
+      return;
+    }
+    if (forceNextScrollRef.current || isNearBottom()) {
+      requestAnimationFrame(() => scrollToBottom(forceNextScrollRef.current ? 'auto' : 'smooth'));
+      forceNextScrollRef.current = false;
+    }
+  }, [messages, directMessages, isNearBottom, scrollToBottom]);
+
+  const handleSendMessage = async (text?: string) => {
     const messageText = text ?? inputValue.trim();
 
-    if (!messageText) return;
+    if (!messageText || (activeChat === 'bot' ? isTyping : isSendingDirectMessage)) return;
 
+    forceNextScrollRef.current = true;
     setInputValue('');
-    void sendMessage(messageText);
+    if (activeChat === 'bot') {
+      await sendMessage(messageText);
+    } else {
+      const recipientId = activeChat;
+      setIsSendingDirectMessage(true);
+      setDirectMessageError('');
+      try {
+        const newMsg = await messageApi.sendMessage(recipientId, messageText);
+        if (activeChatRef.current === recipientId) {
+          setDirectMessages(prev => [...prev, newMsg]);
+        }
+      } catch {
+        if (activeChatRef.current === recipientId) {
+          setInputValue(messageText);
+          setDirectMessageError('Message was not sent. Check your connection and try again.');
+        }
+      } finally {
+        setIsSendingDirectMessage(false);
+      }
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      handleSendMessage();
+    if (event.key === 'Enter' && !event.shiftKey && !event.repeat && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      void handleSendMessage();
     }
   };
+
+  const handleMarkNotificationRead = (notificationId: number) => {
+    notificationApi.markRead(notificationId)
+      .then(() => {
+        setNotifications(prev =>
+          prev.map(n => n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n)
+        );
+      })
+      .catch(() => {
+        // Silently fail
+      });
+  };
+
+  const isSending = activeChat === 'bot' ? isTyping : isSendingDirectMessage;
 
   const promptHistory = recentUserPrompts(messages);
   const showEmptyState = messages.length <= 1 && !isTyping;
@@ -201,50 +507,118 @@ export default function ChatPage() {
     ? messages.filter((message) => message.id !== 'welcome')
     : messages;
 
+  // Get active DM recipient info
+  const activeDmRecipient = activeChat !== 'bot'
+    ? employees.find(e => e.employee_id === activeChat)
+    : null;
+
+  const chatTitle = activeChat === 'bot'
+    ? 'Chat with InternBot'
+    : activeDmRecipient
+      ? `Chat with ${activeDmRecipient.name}`
+      : 'Direct Message';
+
+  const chatSubtitle = activeChat === 'bot'
+    ? 'Talent intelligence'
+    : activeDmRecipient
+      ? `${activeDmRecipient.role || activeDmRecipient.department || 'Employee'}`
+      : '';
+
+  const inputPlaceholder = activeChat === 'bot'
+    ? 'Ask InternBot about skills, teams, or who can help next...'
+    : activeDmRecipient
+      ? `Message ${activeDmRecipient.name}...`
+      : 'Type a message...';
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0b0b0c] text-white">
+    <div className="relative h-dvh overflow-hidden bg-[#0b0b0c] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(78,87,255,0.14),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(16,185,129,0.10),_transparent_26%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent_16%,transparent_84%,rgba(255,255,255,0.02))]" />
 
-      <div className="relative flex min-h-screen flex-col md:flex-row">
-        <aside className="w-full shrink-0 border-b border-white/6 bg-[#111112]/90 backdrop-blur-2xl md:min-h-screen md:w-[290px] md:border-b-0 md:border-r">
-          <div className="flex h-full flex-col px-4 py-4 md:px-5 md:py-6">
-            <div className="flex items-center justify-between gap-3">
-              <Button
-                variant="ghost"
-                className="h-10 rounded-2xl border border-white/8 bg-white/[0.03] px-3 text-zinc-200 hover:bg-white/[0.06]"
-                onClick={() => navigate('/')}
+      <div className="relative flex h-full min-h-0 flex-col md:flex-row">
+        <aside className="flex max-h-[38dvh] w-full shrink-0 flex-col border-b border-white/6 bg-[#111112]/90 backdrop-blur-2xl md:max-h-none md:h-full md:w-[290px] md:border-b-0 md:border-r">
+          <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-4 md:px-5 md:py-6">
+            <Button
+              variant="ghost"
+              className="h-10 rounded-2xl border border-white/8 bg-white/[0.03] px-3 text-zinc-200 hover:bg-white/[0.06]"
+              onClick={() => {
+                logout();
+                navigate('/signin');
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Log out
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-2xl border border-white/8 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]"
+              onClick={clearChat}
+              title="Clear chat"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div ref={sidebarViewportRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 [scrollbar-gutter:stable] md:px-5">
+            <div className="mt-2">
+              <p className="text-xs uppercase tracking-[0.28em] text-zinc-500 mb-3 px-2">AI Assistant</p>
+              <div
+                onClick={() => setActiveChat('bot')}
+                className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
+                  activeChat === 'bot'
+                    ? 'border-emerald-500/30 bg-emerald-500/[0.05] shadow-[0_20px_50px_-35px_rgba(0,0,0,0.85)]'
+                    : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
+                }`}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Home
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-2xl border border-white/8 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]"
-                onClick={clearChat}
-                title="Clear chat"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 border border-emerald-500/20 bg-emerald-950/40">
+                    <AvatarFallback className="bg-transparent text-emerald-400">
+                      <Bot className="h-5 w-5" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-sm font-semibold tracking-tight text-white">
+                      InternBot
+                    </h1>
+                    <p className="text-xs text-emerald-400/80 truncate">
+                      Expert discovery & intelligence
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-6 rounded-[28px] border border-white/8 bg-white/[0.03] p-4 shadow-[0_20px_50px_-35px_rgba(0,0,0,0.85)]">
-              <div className="flex items-start gap-3">
-                <Avatar className="h-11 w-11 border border-white/10 bg-[#1d1d1f]">
-                  <AvatarFallback className="bg-transparent text-zinc-100">
-                    <Bot className="h-5 w-5" />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">Workspace</p>
-                  <h1 className="mt-2 text-lg font-semibold tracking-tight text-white">
-                    InternBot
-                  </h1>
-                  <p className="mt-2 text-sm leading-6 text-zinc-400">
-                    Expert discovery across teams, skills, and mentorship requests.
-                  </p>
-                </div>
+            <div className="mt-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-zinc-500 mb-3 px-2">Direct Messages</p>
+              <div className="space-y-2">
+                {employees.map((emp) => (
+                  <div
+                    key={emp.employee_id}
+                    onClick={() => setActiveChat(emp.employee_id)}
+                    className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
+                      activeChat === emp.employee_id
+                        ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
+                        : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 border border-white/10 bg-[#1d1d1f]">
+                        <AvatarFallback className="bg-transparent text-zinc-300 text-sm">
+                          {emp.name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <h1 className="text-sm font-medium tracking-tight text-zinc-200 truncate">
+                          {emp.name}
+                        </h1>
+                        <p className="text-xs text-zinc-500 truncate">
+                          {emp.role || emp.department}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -281,7 +655,7 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="mt-6 hidden min-h-0 flex-1 flex-col md:flex">
+            <div className="mt-6 hidden min-h-0 flex-shrink-0 flex-col md:flex">
               <div className="flex items-center justify-between">
                 <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Recent prompts</p>
                 <span className="rounded-full border border-white/8 px-2 py-1 text-[11px] text-zinc-500">
@@ -310,157 +684,257 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        <main className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="border-b border-white/6 bg-[#121213]/70 px-4 py-4 backdrop-blur-xl md:px-6">
             <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.32em] text-zinc-500">
-                  AI Chat Workspace
+                  {activeChat === 'bot' ? 'AI Chat Workspace' : 'Direct Message'}
                 </p>
                 <div className="mt-2 flex items-center gap-3">
-                  <h2 className="text-2xl font-semibold tracking-tight text-white">Chat with InternBot</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-white">{chatTitle}</h2>
                   <span className="inline-flex items-center rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-zinc-400">
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5 text-violet-300" />
-                    Talent intelligence
+                    {activeChat === 'bot' ? (
+                      <>
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5 text-violet-300" />
+                        {chatSubtitle}
+                      </>
+                    ) : (
+                      <>
+                        <User className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
+                        {chatSubtitle}
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
 
-              <div className="hidden items-center gap-2 md:flex">
-                <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
-                  Suggestions stay interactive
-                </span>
-                <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
-                  Contact approvals included
-                </span>
+              <div className="flex items-center gap-2">
+                {/* Notification Bell */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative rounded-2xl border border-white/8 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06] hover:text-white"
+                  onClick={() => setNotificationPanelOpen(!notificationPanelOpen)}
+                  title="Notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black">
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </span>
+                  )}
+                </Button>
+
+                <div className="hidden items-center gap-2 md:flex">
+                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
+                    Suggestions stay interactive
+                  </span>
+                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
+                    Contact approvals included
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 px-3 py-3 md:px-6 md:py-5">
-            <div className="mx-auto flex h-[calc(100vh-8.5rem)] max-w-6xl flex-col overflow-hidden rounded-[32px] border border-white/8 bg-[#171718]/88 shadow-[0_30px_120px_-45px_rgba(0,0,0,0.9)]">
-              <ScrollArea className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 px-3 py-3 md:px-6 md:py-5">
+            <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-white/8 bg-[#171718]/88 shadow-[0_30px_120px_-45px_rgba(0,0,0,0.9)]">
+              <div
+                ref={messageViewportRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]"
+                aria-live="polite"
+              >
                 <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
-                  {showEmptyState && (
-                    <section className="flex min-h-[52vh] flex-col items-center justify-center text-center">
-                      <h3 className="mt-6 max-w-2xl text-4xl font-semibold tracking-tight text-white md:text-5xl">
-                        Ask one question and surface the right expert fast.
-                      </h3>
-                      <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
-                        Search by technology, project context, mentorship needs, or domain expertise.
-                        InternBot keeps the conversation grounded in your team directory.
-                      </p>
+                  {activeChat === 'bot' ? (
+                    <>
+                      {showEmptyState && (
+                        <section className="flex min-h-[52vh] flex-col items-center justify-center text-center">
+                          <h3 className="mt-6 max-w-2xl text-4xl font-semibold tracking-tight text-white md:text-5xl">
+                            Ask one question and surface the right expert fast.
+                          </h3>
+                          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
+                            Search by technology, project context, mentorship needs, or domain expertise.
+                            InternBot keeps the conversation grounded in your team directory.
+                          </p>
 
-                      <div className="mt-10 grid w-full max-w-3xl gap-3 md:grid-cols-2">
-                        {suggestionChips.map((chip) => {
-                          const Icon = chip.icon;
+                          <div className="mt-10 grid w-full max-w-3xl gap-3 md:grid-cols-2">
+                            {suggestionChips.map((chip) => {
+                              const Icon = chip.icon;
 
-                          return (
-                            <button
-                              key={chip.text}
-                              type="button"
-                              className="group rounded-[28px] border border-white/8 bg-[#1c1c1d] p-4 text-left transition hover:-translate-y-0.5 hover:border-white/16 hover:bg-[#222224]"
-                              onClick={() => handleSendMessage(chip.text)}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm uppercase tracking-[0.24em] text-zinc-500">
-                                    Quick prompt
-                                  </p>
-                                  <p className="mt-4 text-lg font-medium text-white">{chip.text}</p>
+                              return (
+                                <button
+                                  key={chip.text}
+                                  type="button"
+                                  className="group rounded-[28px] border border-white/8 bg-[#1c1c1d] p-4 text-left transition hover:-translate-y-0.5 hover:border-white/16 hover:bg-[#222224]"
+                                  onClick={() => handleSendMessage(chip.text)}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm uppercase tracking-[0.24em] text-zinc-500">
+                                        Quick prompt
+                                      </p>
+                                      <p className="mt-4 text-lg font-medium text-white">{chip.text}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-300 transition group-hover:text-white">
+                                      <Icon className="h-4 w-4" />
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      )}
+
+                      {renderedMessages.map((message) => {
+                        const isUser = message.role === 'user';
+
+                        return (
+                          <motion.div
+                            key={message.id}
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.28, ease: 'easeOut' }}
+                            className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div className={`flex w-full gap-4 ${isUser ? 'max-w-2xl flex-row-reverse' : 'max-w-3xl'}`}>
+                              <Avatar
+                                className={`mt-1 h-9 w-9 shrink-0 border ${
+                                  isUser
+                                    ? 'border-white/10 bg-[#232325]'
+                                    : 'border-emerald-500/20 bg-emerald-500/[0.08]'
+                                }`}
+                              >
+                                <AvatarFallback className="bg-transparent text-zinc-100">
+                                  {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                                </AvatarFallback>
+                              </Avatar>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-zinc-500">
+                                  <span>{isUser ? 'You' : 'InternBot'}</span>
+                                  <span className="h-1 w-1 rounded-full bg-zinc-600" />
+                                  <span>{formatTime(message.timestamp)}</span>
                                 </div>
-                                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-300 transition group-hover:text-white">
-                                  <Icon className="h-4 w-4" />
+
+                                <div
+                                  className={`rounded-[28px] border px-5 py-4 shadow-[0_24px_70px_-42px_rgba(0,0,0,0.85)] ${
+                                    isUser
+                                      ? 'border-violet-400/15 bg-[linear-gradient(145deg,rgba(99,102,241,0.22),rgba(35,35,38,0.95))] text-zinc-100'
+                                      : 'border-white/8 bg-[#1b1b1d] text-zinc-300'
+                                  }`}
+                                >
+                                  <div className="whitespace-pre-wrap text-[15px] leading-7">
+                                    {formatMessageContent(message.content)}
+                                  </div>
+
+                                  {!isUser && message.confirmationPrompt && (
+                                    <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 p-3 text-sm leading-6 text-zinc-400">
+                                      {message.confirmationPrompt}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {!isUser && message.recommendations && message.recommendations.length > 0 && (
+                                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                    {message.recommendations.map((recommendation, index) => {
+                                      const recommendationId = recommendation.recommendation_id;
+                                      const notificationState =
+                                        recommendationId !== undefined
+                                          ? message.recommendationStates?.[recommendationId]
+                                          : undefined;
+
+                                      return (
+                                        <RecommendationCard
+                                          key={`${message.id}-${recommendation.employee_id}-${index}`}
+                                          recommendation={recommendation}
+                                          canNotify={recommendationId !== undefined}
+                                          notificationState={notificationState}
+                                          onNotify={() => {
+                                            if (recommendationId !== undefined) {
+                                              confirmRecommendation(message.id, recommendationId);
+                                            }
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <>
+                      {directMessagesLoading ? (
+                        <div className="flex min-h-[40vh] items-center justify-center text-zinc-400">
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading conversation...
+                        </div>
+                      ) : directMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center min-h-[40vh] text-center">
+                          <div className="h-16 w-16 rounded-full bg-white/[0.03] flex items-center justify-center mb-4 border border-white/10">
+                            <Mail className="h-8 w-8 text-zinc-500" />
+                          </div>
+                          <h3 className="text-xl font-medium text-white mb-2">No messages yet</h3>
+                          <p className="text-zinc-400 text-sm">Send a message to start the conversation.</p>
+                        </div>
+                      ) : (
+                        directMessages.map((msg) => {
+                          const isUser = msg.sender_id === user?.employee_id;
+                          const senderEmployee = !isUser ? employees.find(e => e.employee_id === msg.sender_id) : null;
+                          return (
+                            <motion.div
+                              key={msg.id}
+                              initial={{ opacity: 0, y: 12 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.28, ease: 'easeOut' }}
+                              className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div className={`flex w-full gap-4 ${isUser ? 'max-w-2xl flex-row-reverse' : 'max-w-3xl'}`}>
+                                <Avatar
+                                  className={`mt-1 h-9 w-9 shrink-0 border border-white/10 ${
+                                    isUser ? 'bg-[#232325]' : 'bg-[#1d1d1f]'
+                                  }`}
+                                >
+                                  <AvatarFallback className="bg-transparent text-zinc-100 text-sm">
+                                    {isUser
+                                      ? (user?.name?.charAt(0) || <User className="h-4 w-4" />)
+                                      : (senderEmployee?.name?.charAt(0) || <User className="h-4 w-4" />)
+                                    }
+                                  </AvatarFallback>
+                                </Avatar>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-zinc-500">
+                                    <span>{isUser ? 'You' : (senderEmployee?.name || 'Colleague')}</span>
+                                    <span className="h-1 w-1 rounded-full bg-zinc-600" />
+                                    <span>{formatTime(new Date(msg.timestamp))}</span>
+                                  </div>
+
+                                  <div
+                                    className={`rounded-[28px] border px-5 py-4 shadow-[0_24px_70px_-42px_rgba(0,0,0,0.85)] ${
+                                      isUser
+                                        ? 'border-violet-400/15 bg-[linear-gradient(145deg,rgba(99,102,241,0.22),rgba(35,35,38,0.95))] text-zinc-100'
+                                        : 'border-white/8 bg-[#1b1b1d] text-zinc-300'
+                                    }`}
+                                  >
+                                    <div className="whitespace-pre-wrap text-[15px] leading-7">
+                                      {msg.message}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            </button>
+                            </motion.div>
                           );
-                        })}
-                      </div>
-                    </section>
+                        })
+                      )}
+                    </>
                   )}
 
-                  {renderedMessages.map((message) => {
-                    const isUser = message.role === 'user';
-
-                    return (
-                      <motion.div
-                        key={message.id}
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.28, ease: 'easeOut' }}
-                        className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div className={`flex w-full gap-4 ${isUser ? 'max-w-2xl flex-row-reverse' : 'max-w-3xl'}`}>
-                          <Avatar
-                            className={`mt-1 h-9 w-9 shrink-0 border ${
-                              isUser
-                                ? 'border-white/10 bg-[#232325]'
-                                : 'border-emerald-500/20 bg-emerald-500/[0.08]'
-                            }`}
-                          >
-                            <AvatarFallback className="bg-transparent text-zinc-100">
-                              {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                            </AvatarFallback>
-                          </Avatar>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-zinc-500">
-                              <span>{isUser ? 'You' : 'InternBot'}</span>
-                              <span className="h-1 w-1 rounded-full bg-zinc-600" />
-                              <span>{formatTime(message.timestamp)}</span>
-                            </div>
-
-                            <div
-                              className={`rounded-[28px] border px-5 py-4 shadow-[0_24px_70px_-42px_rgba(0,0,0,0.85)] ${
-                                isUser
-                                  ? 'border-violet-400/15 bg-[linear-gradient(145deg,rgba(99,102,241,0.22),rgba(35,35,38,0.95))] text-zinc-100'
-                                  : 'border-white/8 bg-[#1b1b1d] text-zinc-300'
-                              }`}
-                            >
-                              <div className="whitespace-pre-wrap text-[15px] leading-7">
-                                {formatMessageContent(message.content)}
-                              </div>
-
-                              {!isUser && message.confirmationPrompt && (
-                                <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 p-3 text-sm leading-6 text-zinc-400">
-                                  {message.confirmationPrompt}
-                                </div>
-                              )}
-                            </div>
-
-                            {!isUser && message.recommendations && message.recommendations.length > 0 && (
-                              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                {message.recommendations.map((recommendation, index) => {
-                                  const recommendationId = recommendation.recommendation_id;
-                                  const notificationState =
-                                    recommendationId !== undefined
-                                      ? message.recommendationStates?.[recommendationId]
-                                      : undefined;
-
-                                  return (
-                                    <RecommendationCard
-                                      key={`${message.id}-${recommendation.employee_id}-${index}`}
-                                      recommendation={recommendation}
-                                      canNotify={recommendationId !== undefined}
-                                      notificationState={notificationState}
-                                      onNotify={() => {
-                                        if (recommendationId !== undefined) {
-                                          confirmRecommendation(message.id, recommendationId);
-                                        }
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-
-                  {isTyping && (
+                  {isTyping && activeChat === 'bot' && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -489,33 +963,39 @@ export default function ChatPage() {
                     </motion.div>
                   )}
 
-                  <div ref={scrollRef} className="h-2" />
+                  {directMessageError && activeChat !== 'bot' && (
+                    <div role="alert" className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                      {directMessageError}
+                    </div>
+                  )}
                 </div>
-              </ScrollArea>
+              </div>
 
               <div className="border-t border-white/8 bg-[#151516] px-4 py-4 md:px-6">
                 <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
-                  <div className="flex flex-wrap gap-2 md:hidden">
-                    {promptHistory.map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400"
-                        onClick={() => handleSendMessage(prompt)}
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
+                  {activeChat === 'bot' && (
+                    <div className="flex flex-wrap gap-2 md:hidden">
+                      {promptHistory.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-400"
+                          onClick={() => handleSendMessage(prompt)}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="rounded-[30px] border border-white/8 bg-[#202022] p-2 shadow-[0_20px_70px_-45px_rgba(0,0,0,0.95)]">
                     <div className="flex items-center gap-3 rounded-[24px] bg-[#111112] px-4 py-3">
                       <div className="hidden rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-medium text-zinc-400 md:inline-flex">
-                        Ask anything
+                        {activeChat === 'bot' ? 'Ask anything' : 'Message'}
                       </div>
                       <Input
                         type="text"
-                        placeholder="Ask InternBot about skills, teams, or who can help next..."
+                        placeholder={inputPlaceholder}
                         value={inputValue}
                         onChange={(event) => setInputValue(event.target.value)}
                         onKeyDown={handleKeyDown}
@@ -523,7 +1003,8 @@ export default function ChatPage() {
                       />
                       <Button
                         onClick={() => handleSendMessage()}
-                        disabled={!inputValue.trim() || isTyping}
+                        disabled={!inputValue.trim() || isSending}
+                        aria-label="Send message"
                         size="icon"
                         className="h-11 w-11 rounded-2xl bg-white text-black hover:bg-zinc-200 disabled:opacity-40"
                       >
@@ -533,12 +1014,25 @@ export default function ChatPage() {
                   </div>
 
                   <p className="px-1 text-xs text-zinc-500">
-                    Recommendations reflect live API results when available and gracefully fall back to demo data when the backend is offline.
+                    {activeChat === 'bot'
+                      ? 'Recommendations reflect live API results when available and gracefully fall back to demo data when the backend is offline.'
+                      : 'Messages are delivered instantly and stored securely.'}
                   </p>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Notification Panel Overlay */}
+          <AnimatePresence>
+            {notificationPanelOpen && (
+              <NotificationPanel
+                notifications={notifications}
+                onMarkRead={handleMarkNotificationRead}
+                onClose={() => setNotificationPanelOpen(false)}
+              />
+            )}
+          </AnimatePresence>
         </main>
       </div>
     </div>

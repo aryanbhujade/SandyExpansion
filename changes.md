@@ -1,5 +1,45 @@
 # Changes Made
 
+## Fine-tuning Features (User Profile, Time-sorted DMs, Unread Badges, Notifications, and gitignore Cleanup)
+
+A set of UI polish and fine-tuning improvements were implemented to support direct messaging workflow, user identity, and repository cleanup:
+
+### 1. User Profile Modal & Identity Visibility
+- **Frontend Changes:**
+  - Created a glassmorphic user card pinned to the bottom of the sidebar displaying the logged-in user's name, avatar, and designation.
+  - Added a "Profile" button opening a custom edit modal (`ProfileModal.tsx`) allowing users to view and update their department, role, location, skills, projects, and notes/bio.
+  - Integrated `AuthContext` to trigger `refreshUser()` on successful update, immediately updating the card without page reloads.
+- **Backend Changes:**
+  - Added `GET /api/employees/{employee_id}/profile` to retrieve profile details (skills, expertise, projects, notes).
+  - Added `PUT /api/employees/profile` to update user profile information.
+
+### 2. Time-sorted DMs & Sidebar Badges
+- **Frontend Changes:**
+  - The DM sidebar list now dynamically sorts active threads based on the latest message timestamp in descending order (newest chats on top), falling back to alphabetical sorting for colleagues with no chat history.
+  - Added count badges (green circles) displaying unread DMs next to each colleague's name.
+  - Selecting a colleague clears their unread state instantly in the UI.
+- **Backend Changes:**
+  - Added `GET /api/messages/conversations/active` returning metadata of last active messages (message content, sender_id, read status, and timestamp).
+  - Added `GET /api/messages/unread/count` returning unread count grouped by sender.
+  - Modified `GET /api/messages/{employee_id}` to mark incoming messages from that colleague as read.
+  - Added database migration on backend startup to introduce the `read` column to `direct_messages` schema.
+
+### 3. Real-Time Floating DM Toasts
+- **Frontend Changes:**
+  - Set up a custom slide-in floating notification toast system at the bottom-right corner of the workspace.
+  - Triggers a toast when a new direct message is received from a colleague other than the one currently active in the chat viewport.
+  - Clicking the toast shifts focus to that DM and dismisses the notification.
+  - Toasts auto-expire and slide out of view after 5 seconds.
+
+### 4. Repository Cleanup & Running Instructions
+- Deleted duplicate `.gitignore` files from `backend/` and `frontend/` folders.
+- Created a consolidated `.gitignore` file at the repository root managing Node/Vite build directories, Python virtual environments, SQLite database files, environment variables, logs, and OS files.
+- Overhauled `README.md` to document the new features, provide clear setup steps for LLM (Ollama/Mistral), backend, frontend, and list pre-seeded usernames and credentials for quick sign-in.
+
+---
+
+## FIGMA UI & INTEGRATION CHANGES (PREVIOUS WORK)
+
 This file documents the changes made during the Figma-inspired chat UI update and the frontend-to-backend integration work for the root project folders:
 
 - `frontend/`

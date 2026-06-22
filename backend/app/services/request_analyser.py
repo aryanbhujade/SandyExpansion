@@ -161,6 +161,35 @@ def _heuristic_analysis(user_message: str) -> dict[str, Any]:
 
 
 def analyse_user_request(user_message: str, user_profile: dict | None = None) -> dict:
+    # First check for simple greetings or help requests
+    text_clean = re.sub(r"[^\w\s]", "", user_message.lower()).strip()
+    greetings = {"hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening", "yo", "hi there", "hello there", "sandy", "sandy bot"}
+    help_words = {"help", "info", "information", "what can you do", "commands", "how to use", "who are you"}
+    
+    if text_clean in greetings:
+        return {
+            "primary_intent": "fallback",
+            "topic": "greeting",
+            "required_skills": [],
+            "needs_knowledge": False,
+            "needs_contact": False,
+            "needs_user_profile": False,
+            "requires_human": False,
+            "confidence": 1.0,
+        }
+        
+    if text_clean in help_words or any(phrase in text_clean for phrase in ["what can you do", "how to use", "how does this work"]):
+        return {
+            "primary_intent": "fallback",
+            "topic": "help",
+            "required_skills": [],
+            "needs_knowledge": False,
+            "needs_contact": False,
+            "needs_user_profile": False,
+            "requires_human": False,
+            "confidence": 1.0,
+        }
+
     system_prompt = (
         "You classify Sandy Connect employee-routing requests. "
         "Return strict JSON only. Do not mention or invent employee names. "

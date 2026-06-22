@@ -145,6 +145,7 @@ class DirectMessage(Base):
     sender_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
     receiver_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
     message = Column(Text, nullable=False)
+    read = Column(Boolean, nullable=False, default=False)
     timestamp = Column(DateTime, nullable=False, default=utcnow)
 
 

@@ -1,45 +1,87 @@
+# -------------------------------------------------------------
+# Consolidated .gitignore for Sandy Connect & Bot Application
+# -------------------------------------------------------------
+
 # Dependencies
 node_modules/
 frontend/node_modules/
 
-# Python
+# Python compiled files
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-backend/.venv/
-backend/venv/
 *.egg-info/
 .eggs/
 
-# Environment files
-.env
-backend/.env
-frontend/.env
+# Virtual environments
+.venv/
+venv/
+sandyvenv/
+backend/.venv/
+backend/venv/
+backend/sandyvenv/
 
-# Databases
+# Environment files (sensitive credentials)
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*
+!.env.example
+backend/.env
+backend/.env.example
+frontend/.env
+frontend/.env.example
+frontend/.env.*
+
+# Databases & local state
 *.db
+*.db-journal
+*.sqlite
+backend/*.db
+backend/*.db-journal
+sandy_auth.db
+sandy_connect.db
 backend/sandy_connect.db
+backend/sandy_auth.db
 backend/auth.db
 
-# Build output
+# Build outputs
+dist/
+dist-ssr/
 frontend/dist/
+frontend/dist-ssr/
 frontend/build/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
 
 # Logs
 *.log
 backend/server.log
+backend/*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Gemini / Antigravity
+# Editor & IDE files
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Gemini / Antigravity Agent directories
 .gemini/

@@ -26,7 +26,8 @@ import { Input } from '@/components/ui/input';
 import { useChatContext } from '@/context/ChatContext';
 import { useAuth } from '@/context/AuthContext';
 import { employeeApi, messageApi, notificationApi, type DirectMessage } from '@/services/api';
-import type { Message, Notification, RecommendationItem, RecommendationNotificationState, Employee } from '@/types';
+import type { Message, Notification, RecommendationItem, RecommendationNotificationState, Employee, ActiveConversation } from '@/types';
+import ProfileModal from '@/components/ProfileModal';
 
 const suggestionChips = [
   { icon: Search, text: 'Find React experts' },
@@ -288,7 +289,7 @@ function NotificationPanel({
 
 export default function ChatPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const {
     messages,
     isTyping,
@@ -318,6 +319,13 @@ export default function ChatPage() {
 
   const unreadNotificationCount = notifications.filter((n) => !n.read_at).length;
 
+  // Profile modal and Live chat states
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [activeConversations, setActiveConversations] = useState<Record<string, ActiveConversation>>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [toasts, setToasts] = useState<{ id: string; senderId: string; senderName: string; message: string; timestamp: Date }[]>([]);
+  const prevConversationsRef = useRef<Record<string, ActiveConversation>>({});
+
   const isNearBottom = useCallback(() => {
     const viewport = messageViewportRef.current;
     if (!viewport) return true;
@@ -336,7 +344,8 @@ export default function ChatPage() {
     employeeApi.list({ limit: 100 })
       .then(data => {
         if (!cancelled && user) {
-          setEmployees(data.filter(emp => emp.employee_id !== user.employee_id));
+          const currentUserId = user.employee_id || (user as any).id;
+          setEmployees(data.filter(emp => emp.employee_id !== currentUserId));
         }
       })
       .catch(() => {
@@ -346,6 +355,70 @@ export default function ChatPage() {
       cancelled = true;
     };
   }, [user]);
+
+  const fetchConversationsAndUnread = useCallback(async (isInitial = false) => {
+    try {
+      const [convData, unreadData] = await Promise.all([
+        messageApi.getActiveConversations(),
+        messageApi.getUnreadCounts()
+      ]);
+      
+      setActiveConversations(convData);
+      setUnreadCounts(unreadData);
+      
+      // If this is not the initial load, check for new incoming messages to show notifications
+      if (!isInitial) {
+        Object.entries(convData).forEach(([colleagueId, conv]) => {
+          const prevConv = prevConversationsRef.current[colleagueId];
+          const isNewMessage = !prevConv || prevConv.timestamp !== conv.timestamp;
+          
+          if (isNewMessage && conv.sender_id === colleagueId && colleagueId !== activeChatRef.current) {
+            const sender = employees.find(e => e.employee_id === colleagueId);
+            const senderName = sender ? sender.name : 'Someone';
+            
+            // Show toast notification
+            setToasts(prev => [
+              ...prev,
+              {
+                id: Math.random().toString(36).substr(2, 9),
+                senderId: colleagueId,
+                senderName,
+                message: conv.last_message,
+                timestamp: new Date()
+              }
+            ]);
+          }
+        });
+      }
+      
+      prevConversationsRef.current = convData;
+    } catch (error) {
+      console.error("Failed to fetch conversations and unread counts", error);
+    }
+  }, [employees]);
+
+  // Poll conversations and unread counts
+  useEffect(() => {
+    if (employees.length === 0) return;
+    
+    // Fetch immediately
+    void fetchConversationsAndUnread(true);
+    
+    const interval = setInterval(() => {
+      void fetchConversationsAndUnread(false);
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [employees, fetchConversationsAndUnread]);
+
+  // Auto-dismiss toast notifications sequentially
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const timer = setTimeout(() => {
+      setToasts(prev => prev.slice(1));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [toasts]);
 
   // Fetch notifications on mount + poll every 30s
   useEffect(() => {
@@ -420,6 +493,22 @@ export default function ChatPage() {
       return;
     }
 
+    // Instantly clear unread state for the active conversation
+    setUnreadCounts(prev => ({
+      ...prev,
+      [activeChat]: 0
+    }));
+    setActiveConversations(prev => {
+      if (!prev[activeChat]) return prev;
+      return {
+        ...prev,
+        [activeChat]: {
+          ...prev[activeChat],
+          read: true
+        }
+      };
+    });
+
     const requestId = ++messageRequestRef.current;
     setDirectMessages([]);
     setDirectMessagesLoading(true);
@@ -468,6 +557,17 @@ export default function ChatPage() {
         const newMsg = await messageApi.sendMessage(recipientId, messageText);
         if (activeChatRef.current === recipientId) {
           setDirectMessages(prev => [...prev, newMsg]);
+          
+          // Update local conversations state immediately so they move to the top
+          setActiveConversations(prev => ({
+            ...prev,
+            [recipientId]: {
+              last_message: messageText,
+              timestamp: newMsg.timestamp,
+              sender_id: user?.employee_id || '',
+              read: true
+            }
+          }));
         }
       } catch {
         if (activeChatRef.current === recipientId) {
@@ -529,6 +629,19 @@ export default function ChatPage() {
     : activeDmRecipient
       ? `Message ${activeDmRecipient.name}...`
       : 'Type a message...';
+
+  // Sort employees: those with active conversations on top (latest first), then alphabetical
+  const sortedEmployees = [...employees].sort((a, b) => {
+    const convA = activeConversations[a.employee_id];
+    const convB = activeConversations[b.employee_id];
+    
+    if (convA && convB) {
+      return new Date(convB.timestamp).getTime() - new Date(convA.timestamp).getTime();
+    }
+    if (convA) return -1;
+    if (convB) return 1;
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <div className="relative h-dvh overflow-hidden bg-[#0b0b0c] text-white">
@@ -592,33 +705,49 @@ export default function ChatPage() {
             <div className="mt-6">
               <p className="text-xs uppercase tracking-[0.28em] text-zinc-500 mb-3 px-2">Direct Messages</p>
               <div className="space-y-2">
-                {employees.map((emp) => (
-                  <div
-                    key={emp.employee_id}
-                    onClick={() => setActiveChat(emp.employee_id)}
-                    className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
-                      activeChat === emp.employee_id
-                        ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
-                        : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 border border-white/10 bg-[#1d1d1f]">
-                        <AvatarFallback className="bg-transparent text-zinc-300 text-sm">
-                          {emp.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <h1 className="text-sm font-medium tracking-tight text-zinc-200 truncate">
-                          {emp.name}
-                        </h1>
-                        <p className="text-xs text-zinc-500 truncate">
-                          {emp.role || emp.department}
-                        </p>
+                {sortedEmployees.map((emp) => {
+                  const conv = activeConversations[emp.employee_id];
+                  const unreadCount = unreadCounts[emp.employee_id] || 0;
+                  return (
+                    <div
+                      key={emp.employee_id}
+                      onClick={() => setActiveChat(emp.employee_id)}
+                      className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
+                        activeChat === emp.employee_id
+                          ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
+                          : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 border border-white/10 bg-[#1d1d1f]">
+                          <AvatarFallback className="bg-transparent text-zinc-300 text-sm">
+                            {emp.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <h1 className="text-sm font-medium tracking-tight text-zinc-200 truncate">
+                              {emp.name}
+                            </h1>
+                            {conv && (
+                              <span className="text-[10px] text-zinc-500 shrink-0">
+                                {formatRelativeTime(conv.timestamp)}
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs truncate ${unreadCount > 0 ? 'text-zinc-200 font-semibold font-bold' : 'text-zinc-500'}`}>
+                            {conv ? conv.last_message : (emp.role || emp.department)}
+                          </p>
+                        </div>
+                        {unreadCount > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-black shrink-0">
+                            {unreadCount}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -680,6 +809,30 @@ export default function ChatPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+          {/* Pinned User Profile Card */}
+          <div className="flex-shrink-0 border-t border-white/6 px-4 py-4 md:px-5">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/4 bg-white/[0.01] p-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Avatar className="h-9 w-9 border border-emerald-500/20 bg-emerald-950/40">
+                  <AvatarFallback className="bg-transparent text-emerald-400 text-xs font-semibold">
+                    {user?.name?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
+                  <p className="text-[11px] text-zinc-500 truncate">{user?.role || user?.department || 'My Profile'}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-xl border border-white/8 bg-white/[0.03] px-2.5 text-xs text-zinc-300 hover:bg-white/[0.06] shrink-0"
+                onClick={() => setIsProfileOpen(true)}
+              >
+                Profile
+              </Button>
             </div>
           </div>
         </aside>
@@ -1034,6 +1187,53 @@ export default function ChatPage() {
             )}
           </AnimatePresence>
         </main>
+      </div>
+
+      {/* User Profile Modal */}
+      {user && (
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          employeeId={user.employee_id}
+          onProfileUpdated={refreshUser}
+        />
+      )}
+
+      {/* Floating In-App DM Toasts */}
+      <div className="fixed bottom-6 right-6 z-[60] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
+              className="pointer-events-auto flex w-full flex-col rounded-2xl border border-emerald-500/25 bg-[#121213]/95 p-4 text-white shadow-2xl backdrop-blur-xl cursor-pointer hover:bg-zinc-900/90 transition-all duration-200"
+              onClick={() => {
+                setActiveChat(toast.senderId);
+                setToasts(prev => prev.filter(t => t.id !== toast.id));
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="text-xs uppercase tracking-wider font-semibold text-emerald-400">New Message</span>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setToasts(prev => prev.filter(t => t.id !== toast.id));
+                  }}
+                  className="text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="mt-1.5 text-sm font-semibold">{toast.senderName}</p>
+              <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{toast.message}</p>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

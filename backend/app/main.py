@@ -73,6 +73,61 @@ def on_startup() -> None:
     init_db()
     init_auth_db()
 
+    # Ensure DirectMessage table has 'read' column
+    from app.database import engine
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE direct_messages ADD COLUMN read BOOLEAN DEFAULT 0;"))
+            print("Successfully added 'read' column to direct_messages table.")
+    except Exception:
+        pass
+
+    # Auto-seed databases if they are empty
+    from app.database import SessionLocal, Employee
+    from app.services.seed_data import seed_database
+    from app.auth_database import AuthSessionLocal, UserCredential
+    import bcrypt
+    import os
+    import json
+
+    session = SessionLocal()
+    try:
+        if session.query(Employee).count() == 0:
+            print("Sandy Connect database is empty. Auto-seeding...")
+            seed_database(session)
+    finally:
+        session.close()
+
+    auth_session = AuthSessionLocal()
+    try:
+        if auth_session.query(UserCredential).count() == 0:
+            print("Sandy Auth database is empty. Auto-seeding...")
+            # Resolve seed employees file path relative to backend root
+            backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            seed_file = os.path.join(backend_root, "data", "seed_employees.json")
+            if os.path.exists(seed_file):
+                with open(seed_file, "r") as f:
+                    employees = json.load(f)
+                
+                # Hash default password
+                default_password = "Password123!"
+                salt = bcrypt.gensalt()
+                hashed_password = bcrypt.hashpw(default_password.encode('utf-8'), salt).decode('utf-8')
+                
+                for emp in employees:
+                    new_user = UserCredential(
+                        employee_id=emp["id"],
+                        email=emp["email"],
+                        hashed_password=hashed_password
+                    )
+                    auth_session.add(new_user)
+                auth_session.commit()
+                print("Successfully auto-seeded auth database!")
+    finally:
+        auth_session.close()
+
+
 
 def _user_profile_from_request(request: AskRequest) -> dict[str, Any]:
     return {

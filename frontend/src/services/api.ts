@@ -11,6 +11,9 @@ import type {
   Employee,
   EmployeeFilters,
   Notification,
+  EmployeeProfileData,
+  ProfileUpdatePayload,
+  ActiveConversation,
 } from '@/types';
 
 // ---------- Axios Instance ----------
@@ -121,6 +124,16 @@ export const employeeApi = {
     const { data } = await apiClient.get<Employee>(`/api/employees/${employeeId}`);
     return data;
   },
+
+  async getFullProfile(employeeId: string): Promise<EmployeeProfileData> {
+    const { data } = await apiClient.get<EmployeeProfileData>(`/api/employees/${employeeId}/profile`);
+    return data;
+  },
+
+  async updateProfile(profileData: ProfileUpdatePayload): Promise<Employee> {
+    const { data } = await apiClient.put<Employee>('/api/employees/profile', profileData);
+    return data;
+  },
 };
 
 // ---------- Notification API ----------
@@ -173,6 +186,16 @@ export const messageApi = {
   
   async sendMessage(employeeId: string, message: string): Promise<DirectMessage> {
     const { data } = await apiClient.post<DirectMessage>(`/api/messages/${employeeId}`, { message });
+    return data;
+  },
+
+  async getActiveConversations(): Promise<Record<string, ActiveConversation>> {
+    const { data } = await apiClient.get<Record<string, ActiveConversation>>('/api/messages/conversations/active');
+    return data;
+  },
+  
+  async getUnreadCounts(): Promise<Record<string, number>> {
+    const { data } = await apiClient.get<Record<string, number>>('/api/messages/unread/count');
     return data;
   }
 };

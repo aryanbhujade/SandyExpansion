@@ -125,3 +125,37 @@ export interface EmployeeFilters {
   page?: number;
   limit?: number;
 }
+
+// ---------- Profile & Active Conversations ----------
+
+export interface EmployeeProfileData {
+  employee_id: string;
+  name: string;
+  email: string;
+  level: string;
+  role: string;
+  department: string;
+  business_unit: string;
+  location: string;
+  skills: string[];
+  expertise_topics: string[];
+  projects: string[];
+  notes: string;
+}
+
+export interface ProfileUpdatePayload {
+  role?: string;
+  department?: string;
+  location?: string;
+  skills?: string[];
+  expertise_topics?: string[];
+  projects?: string[];
+  notes?: string;
+}
+
+export interface ActiveConversation {
+  last_message: string;
+  timestamp: string;
+  sender_id: string;
+  read: boolean;
+}

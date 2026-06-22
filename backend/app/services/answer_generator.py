@@ -23,6 +23,20 @@ def _format_reason(reason: str | None) -> list[str]:
 
 def _fallback_answer(user_message: str, context: dict, recommendations: dict) -> str:
     analysis = context.get("analysis") or {}
+
+    if analysis.get("topic") == "greeting":
+        return "Hello! I'm Sandy, your internal connection assistant. How can I help you today? You can ask me about specific technologies, projects, or who can help next!"
+
+    if analysis.get("topic") == "help":
+        return (
+            "I can help you discover experts and get system access within your organisation. "
+            "Try asking me:\n"
+            "- 'Who works best for AWS?'\n"
+            "- 'Who can help me with Azure DevOps access?'\n"
+            "- 'Who do I report to?'\n"
+            "- 'Who owns Zoho access requests?'"
+        )
+
     recommended = recommendations.get("recommended_contacts") or []
     escalations = recommendations.get("escalation_contacts") or []
     knowledge = _knowledge_lines(context)

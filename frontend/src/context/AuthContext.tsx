@@ -19,6 +19,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const TOKEN_KEY = 'internbot_token';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -35,14 +36,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('internbot_token');
+      localStorage.removeItem(TOKEN_KEY);
+      const token = sessionStorage.getItem(TOKEN_KEY);
       if (token) {
         try {
           const userData = await authApi.getMe();
           setUser(userData);
         } catch (error) {
           console.error("Failed to fetch user:", error);
-          localStorage.removeItem('internbot_token');
+          sessionStorage.removeItem(TOKEN_KEY);
         }
       }
       setLoading(false);
@@ -51,12 +53,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = (token: string, userData: User) => {
-    localStorage.setItem('internbot_token', token);
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.setItem(TOKEN_KEY, token);
     setUser(userData);
   };
 
   const logout = () => {
-    localStorage.removeItem('internbot_token');
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
   };
 

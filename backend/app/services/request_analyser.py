@@ -14,6 +14,101 @@ ALLOWED_INTENTS = {
     "fallback",
 }
 
+NON_ACTIONABLE_TOPICS = {"greeting", "help", "thanks", "smalltalk", "out_of_scope"}
+
+GREETINGS = {
+    "hi",
+    "hello",
+    "hey",
+    "hola",
+    "greetings",
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "yo",
+    "hi there",
+    "hello there",
+    "sandy",
+    "sandy bot",
+}
+
+THANKS = {
+    "thanks",
+    "thank you",
+    "thanks sandy",
+    "thank you sandy",
+    "cheers",
+    "cool thanks",
+    "nice thanks",
+}
+
+HELP_WORDS = {
+    "help",
+    "info",
+    "information",
+    "what can you do",
+    "commands",
+    "how to use",
+    "who are you",
+}
+
+OFF_TOPIC_HINTS = {
+    "order pizza",
+    "buy pizza",
+    "book a hotel",
+    "book hotel",
+    "weather",
+    "stock price",
+    "movie recommendation",
+    "tell me a joke",
+    "write a poem",
+    "write me a poem",
+    "write a story",
+    "write me a story",
+    "write a song",
+    "write me a song",
+    "lyrics",
+    "play music",
+}
+
+ACTION_VERBS = {
+    "access",
+    "assist",
+    "connect",
+    "contact",
+    "escalate",
+    "find",
+    "handle",
+    "handles",
+    "help",
+    "know",
+    "knows",
+    "owner",
+    "owns",
+    "reach",
+    "report",
+    "route",
+    "speak",
+    "support",
+    "talk",
+}
+
+WORK_CONTEXT_TERMS = {
+    "access",
+    "client",
+    "customer",
+    "department",
+    "expert",
+    "manager",
+    "owner",
+    "project",
+    "report",
+    "team",
+    "tool",
+    "topic",
+    "work",
+}
+
 
 def _base_analysis() -> dict[str, Any]:
     return {
@@ -93,12 +188,115 @@ def _normalise_analysis(raw: dict[str, Any]) -> dict[str, Any]:
     if result["primary_intent"] in {"find_contact", "access_help"}:
         result["needs_contact"] = True
 
+    if result["primary_intent"] == "fallback" and str(result.get("topic") or "").lower() in NON_ACTIONABLE_TOPICS:
+        result["needs_knowledge"] = False
+        result["needs_contact"] = False
+        result["needs_user_profile"] = False
+        result["requires_human"] = False
+
     return result
 
 
-def _heuristic_analysis(user_message: str) -> dict[str, Any]:
-    text = user_message.lower()
+def _clean_text(user_message: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", user_message.lower())).strip()
+
+
+def _is_greeting(text: str) -> bool:
+    if text in GREETINGS:
+        return True
+    return bool(
+        re.fullmatch(
+            r"(hi|hello|hey|yo|good morning|good afternoon|good evening) (sandy|sandy bot|bot)",
+            text,
+        )
+    )
+
+
+def _is_help_request(text: str) -> bool:
+    if text in HELP_WORDS:
+        return True
+    if any(phrase in text for phrase in ["what can you do", "how to use", "how does this work"]):
+        return True
+    return text in {"sandy help", "help sandy", "help sandy bot"}
+
+
+def _fallback_topic(topic: str, confidence: float = 0.9) -> dict[str, Any]:
     analysis = _base_analysis()
+    analysis.update(
+        {
+            "topic": topic,
+            "requires_human": False,
+            "confidence": confidence,
+        }
+    )
+    return analysis
+
+
+def _extract_generic_topic(text: str) -> str | None:
+    patterns = [
+        r"\bwho (?:can|could|should|would)?\s*(?:i\s*)?(?:contact|speak to|talk to|reach out to|ask|go to)\s+(?:about|for|regarding|with)\s+(.+)",
+        r"\bwho (?:owns|handles|knows|supports|manages)\s+(.+)",
+        r"\b(?:can|could) someone help(?: me)?\s+(?:with|on|for)\s+(.+)",
+        r"\b(?:i|we) need(?: some)? help\s+(?:with|on|for)\s+(.+)",
+        r"\b(?:i|we) need access\s+(?:to|for)\s+(.+)",
+        r"\b(?:connect|route|point) me\s+(?:to|towards)\s+(.+)",
+        r"\b(?:find|recommend) (?:a|an|the)?\s*(?:person|expert|owner|contact)?\s*(?:for|with|about)\s+(.+)",
+        r"\b(?:looking for|need) someone (?:who )?(?:knows|understands|handles|can help with)\s+(.+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            topic = match.group(1).strip(" .?!")
+            topic = re.sub(r"\b(please|pls|thanks|thank you)\b", "", topic).strip()
+            return topic or None
+    return None
+
+
+def _generic_connect_analysis(text: str) -> dict[str, Any] | None:
+    topic = _extract_generic_topic(text)
+    tokens = set(text.split())
+    has_action = bool(tokens & ACTION_VERBS)
+    has_work_context = bool(tokens & WORK_CONTEXT_TERMS)
+
+    if topic:
+        intent = "access_help" if "access" in tokens else "find_contact"
+        analysis = _base_analysis()
+        analysis.update(
+            {
+                "primary_intent": intent,
+                "topic": topic,
+                "required_skills": [topic] if len(topic) <= 80 else [],
+                "needs_knowledge": False,
+                "needs_contact": True,
+                "requires_human": False,
+                "confidence": 0.68,
+            }
+        )
+        return analysis
+
+    if has_action and has_work_context:
+        analysis = _base_analysis()
+        analysis.update(
+            {
+                "primary_intent": "find_contact",
+                "topic": None,
+                "needs_contact": True,
+                "requires_human": True,
+                "confidence": 0.45,
+            }
+        )
+        return analysis
+
+    return None
+
+
+def _heuristic_analysis(user_message: str) -> dict[str, Any]:
+    text = _clean_text(user_message)
+    analysis = _base_analysis()
+
+    if any(hint in text for hint in OFF_TOPIC_HINTS):
+        return _fallback_topic("out_of_scope", confidence=0.85)
 
     if any(phrase in text for phrase in ["who do i report to", "my manager", "line manager", "reporting manager"]):
         analysis.update(
@@ -157,44 +355,36 @@ def _heuristic_analysis(user_message: str) -> dict[str, Any]:
         )
         return analysis
 
+    generic_analysis = _generic_connect_analysis(text)
+    if generic_analysis:
+        return generic_analysis
+
+    if text.endswith("?"):
+        return _fallback_topic("out_of_scope", confidence=0.65)
+
     return analysis
 
 
 def analyse_user_request(user_message: str, user_profile: dict | None = None) -> dict:
     # First check for simple greetings or help requests
-    text_clean = re.sub(r"[^\w\s]", "", user_message.lower()).strip()
-    greetings = {"hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening", "yo", "hi there", "hello there", "sandy", "sandy bot"}
-    help_words = {"help", "info", "information", "what can you do", "commands", "how to use", "who are you"}
+    text_clean = _clean_text(user_message)
     
-    if text_clean in greetings:
-        return {
-            "primary_intent": "fallback",
-            "topic": "greeting",
-            "required_skills": [],
-            "needs_knowledge": False,
-            "needs_contact": False,
-            "needs_user_profile": False,
-            "requires_human": False,
-            "confidence": 1.0,
-        }
+    if _is_greeting(text_clean):
+        return _fallback_topic("greeting", confidence=1.0)
+
+    if text_clean in THANKS:
+        return _fallback_topic("thanks", confidence=1.0)
         
-    if text_clean in help_words or any(phrase in text_clean for phrase in ["what can you do", "how to use", "how does this work"]):
-        return {
-            "primary_intent": "fallback",
-            "topic": "help",
-            "required_skills": [],
-            "needs_knowledge": False,
-            "needs_contact": False,
-            "needs_user_profile": False,
-            "requires_human": False,
-            "confidence": 1.0,
-        }
+    if _is_help_request(text_clean):
+        return _fallback_topic("help", confidence=1.0)
 
     system_prompt = (
         "You classify Sandy Connect employee-routing requests. "
         "Return strict JSON only. Do not mention or invent employee names. "
         "Use only these primary_intent values: find_contact, ask_question, "
-        "manager_lookup, access_help, fallback."
+        "manager_lookup, access_help, fallback. "
+        "Only classify internal employee routing, access, manager, project, expertise, "
+        "or approved internal knowledge questions as actionable."
     )
     prompt = f"""
 Classify this user request for an internal company connection assistant.
@@ -223,6 +413,7 @@ Rules:
 - "Who do I report to?" => manager_lookup, needs_user_profile true, needs_contact true.
 - "What expos are Sandhata attending?" => ask_question, topic "upcoming expos", needs_knowledge true.
 - "Who handles Zoho access?" => access_help or find_contact, topic "Zoho access", needs_contact true.
+- Greetings, thanks, social chat, jokes, shopping, food orders, weather, or unrelated personal tasks => fallback, topic "out_of_scope" or "smalltalk", needs_contact false, needs_knowledge false, requires_human false.
 - If unclear, use fallback.
 """
 
@@ -231,6 +422,12 @@ Rules:
         parsed = _extract_json(raw_text)
         if parsed is None:
             return _heuristic_analysis(user_message)
-        return _normalise_analysis(parsed)
+        normalised = _normalise_analysis(parsed)
+        heuristic = _heuristic_analysis(user_message)
+        if heuristic.get("topic") == "out_of_scope" and any(hint in text_clean for hint in OFF_TOPIC_HINTS):
+            return heuristic
+        if normalised["primary_intent"] == "fallback" and heuristic["primary_intent"] != "fallback":
+            return heuristic
+        return normalised
     except LocalLLMError:
         return _heuristic_analysis(user_message)

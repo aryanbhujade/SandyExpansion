@@ -14,6 +14,7 @@ class NotificationResponse(BaseModel):
     chat_log_id: int | None
     notified_emp_id: str
     requester_id: str | None
+    requester_name: str | None
     channel: str
     status: str
     topic: str
@@ -37,14 +38,16 @@ def get_notifications(current_user: dict = Depends(get_current_user_dep), db: Se
         contact_req = db.query(ContactRequest).filter(ContactRequest.id == notif.contact_request_id).first()
         
         chat_log_id = contact_req.chat_message_id if contact_req else None
-        requester_id = contact_req.requester_name if contact_req else None
-        topic = notif.subject
+        requester_id = contact_req.requester_employee_id if contact_req else None
+        requester_name = contact_req.requester_name if contact_req else None
+        topic = contact_req.topic if contact_req and contact_req.topic else notif.subject
         
         response.append({
             "id": notif.id,
             "chat_log_id": chat_log_id,
             "notified_emp_id": notif.recipient_employee_id,
             "requester_id": requester_id,
+            "requester_name": requester_name,
             "channel": notif.channel,
             "status": notif.status,
             "topic": topic,

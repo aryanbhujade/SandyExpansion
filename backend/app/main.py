@@ -1,14 +1,32 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_
 
-from app.database import ChatMessage, Recommendation, get_db, init_db
+from app.database import (
+    ChatMessage,
+    ContactRequest,
+    DirectMessage,
+    Employee,
+    Recommendation,
+    RecommendationFeedback,
+    SessionLocal,
+    UserCredential,
+    get_db,
+    init_db,
+    utcnow,
+)
 from app.services.answer_generator import generate_answer
-from app.services.contact_request_service import confirm_recommendation, mark_contact_request_fulfilled
+from app.services.contact_request_service import (
+    FEEDBACK_PROMPT_DELAY_SECONDS,
+    confirm_recommendation,
+    mark_contact_request_fulfilled,
+)
 from app.services.context_builder import build_context
 from app.services.feedback_service import recommendation_id_for_contact_request, store_recommendation_feedback
 from app.services.local_llm import get_llm_settings
@@ -16,7 +34,6 @@ from app.services.recommendation_engine import recommend_contacts
 from app.services.request_analyser import analyse_user_request
 from app.services.seed_data import seed_database
 from app.auth import get_current_user_dep, router as auth_router
-from app.auth_database import init_auth_db
 from app.messages import router as messages_router
 from app.employees import router as employees_router
 from app.notifications import router as notifications_router
@@ -59,7 +76,7 @@ class FeedbackRequest(BaseModel):
 
 class ConfirmRecommendationRequest(BaseModel):
     requester_name: str | None = None
-    notification_channel: str = "email"
+    notification_channel: str = "chat"
 
 
 class FrontendChatRequest(BaseModel):
@@ -68,64 +85,40 @@ class FrontendChatRequest(BaseModel):
     session_id: str | None = None
 
 
+def _seed_credentials_if_empty(db) -> None:
+    if db.query(UserCredential).count() > 0:
+        return
+
+    import bcrypt
+
+    print("Sandy credentials are empty. Auto-seeding...")
+    default_password = "Password123!"
+    hashed_password = bcrypt.hashpw(default_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    for employee in db.query(Employee).all():
+        db.add(
+            UserCredential(
+                employee_id=employee.id,
+                email=employee.email.strip().lower(),
+                hashed_password=hashed_password,
+            )
+        )
+    db.commit()
+    print("Successfully auto-seeded credentials.")
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
-    init_auth_db()
-
-    # Ensure DirectMessage table has 'read' column
-    from app.database import engine
-    from sqlalchemy import text
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE direct_messages ADD COLUMN read BOOLEAN DEFAULT 0;"))
-            print("Successfully added 'read' column to direct_messages table.")
-    except Exception:
-        pass
-
-    # Auto-seed databases if they are empty
-    from app.database import SessionLocal, Employee
-    from app.services.seed_data import seed_database
-    from app.auth_database import AuthSessionLocal, UserCredential
-    import bcrypt
-    import os
-    import json
 
     session = SessionLocal()
     try:
         if session.query(Employee).count() == 0:
             print("Sandy Connect database is empty. Auto-seeding...")
             seed_database(session)
+        _seed_credentials_if_empty(session)
     finally:
         session.close()
-
-    auth_session = AuthSessionLocal()
-    try:
-        if auth_session.query(UserCredential).count() == 0:
-            print("Sandy Auth database is empty. Auto-seeding...")
-            # Resolve seed employees file path relative to backend root
-            backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            seed_file = os.path.join(backend_root, "data", "seed_employees.json")
-            if os.path.exists(seed_file):
-                with open(seed_file, "r") as f:
-                    employees = json.load(f)
-                
-                # Hash default password
-                default_password = "Password123!"
-                salt = bcrypt.gensalt()
-                hashed_password = bcrypt.hashpw(default_password.encode('utf-8'), salt).decode('utf-8')
-                
-                for emp in employees:
-                    new_user = UserCredential(
-                        employee_id=emp["id"],
-                        email=emp["email"],
-                        hashed_password=hashed_password
-                    )
-                    auth_session.add(new_user)
-                auth_session.commit()
-                print("Successfully auto-seeded auth database!")
-    finally:
-        auth_session.close()
 
 
 
@@ -143,6 +136,7 @@ def _user_profile_from_request(request: AskRequest) -> dict[str, Any]:
 def _store_interaction(db, request: AskRequest, analysis: dict, recommendations: dict, answer: str) -> dict:
     chat_message = ChatMessage(
         session_id=request.session_id,
+        user_id=request.user_id,
         user_name=request.user_name,
         user_level=request.user_level,
         user_role=request.user_role,
@@ -194,8 +188,8 @@ def _build_confirmation_prompt(analysis: dict, stored_recommendations: dict) -> 
     first = contacts[0]
     topic = analysis.get("topic") or "this request"
     return (
-        f"Would you like me to notify {first['name']} that you may contact them "
-        f"soon in regards to {topic}? If yes, confirm recommendation_id "
+        f"Would you like me to send {first['name']} a chat message saying you may "
+        f"contact them soon in regards to {topic}? If yes, confirm recommendation_id "
         f"{first['recommendation_id']}."
     )
 
@@ -229,6 +223,58 @@ def _run_sandy_pipeline(db, request: AskRequest) -> dict:
     }
 
 
+def _ask_request_for_user(request: AskRequest, current_user: dict) -> AskRequest:
+    return AskRequest(
+        user_id=current_user["employee_id"],
+        user_name=current_user["name"],
+        user_level=current_user.get("level"),
+        user_role=current_user.get("role"),
+        user_department=current_user.get("department"),
+        message=request.message,
+        channel=request.channel,
+        session_id=request.session_id,
+    )
+
+
+def _chat_message_belongs_to_user(chat_message: ChatMessage | None, current_user: dict) -> bool:
+    if chat_message is None:
+        return False
+    if chat_message.user_id:
+        return chat_message.user_id == current_user["employee_id"]
+    return chat_message.user_name == current_user["name"]
+
+
+def _get_contact_request_for_participant(db, contact_request_id: int, current_user: dict) -> ContactRequest:
+    contact_request = db.get(ContactRequest, contact_request_id)
+    if contact_request is None:
+        raise ValueError(f"Contact request {contact_request_id} was not found.")
+
+    employee_id = current_user["employee_id"]
+    if contact_request.requester_employee_id == employee_id:
+        return contact_request
+
+    if contact_request.direct_message_id is not None:
+        direct_message = db.get(DirectMessage, contact_request.direct_message_id)
+        if direct_message and employee_id in {direct_message.sender_id, direct_message.receiver_id}:
+            return contact_request
+
+    chat_message = db.get(ChatMessage, contact_request.chat_message_id)
+    if _chat_message_belongs_to_user(chat_message, current_user):
+        return contact_request
+
+    if contact_request.recommended_employee_id == employee_id:
+        return contact_request
+
+    raise PermissionError("You do not have access to this contact request.")
+
+
+def _recommendation_belongs_to_user(db, recommendation_id: int, current_user: dict) -> bool:
+    recommendation = db.get(Recommendation, recommendation_id)
+    if recommendation is None:
+        raise ValueError(f"Recommendation {recommendation_id} was not found.")
+    return _chat_message_belongs_to_user(db.get(ChatMessage, recommendation.chat_message_id), current_user)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings = get_llm_settings()
@@ -241,46 +287,59 @@ def health() -> dict[str, str]:
 
 
 @app.post("/admin/seed")
-def admin_seed(db=Depends(get_db)) -> dict:
+def admin_seed(current_user: dict = Depends(get_current_user_dep), db=Depends(get_db)) -> dict:
     init_db()
     counts = seed_database(db)
-    return {"status": "ok", "seeded": counts}
+    return {"status": "ok", "seeded": counts, "requested_by": current_user["employee_id"]}
 
 
 @app.post("/ask")
-def ask(request: AskRequest, db=Depends(get_db)) -> dict:
-    return _run_sandy_pipeline(db, request)
+def ask(
+    request: AskRequest,
+    current_user: dict = Depends(get_current_user_dep),
+    db=Depends(get_db),
+) -> dict:
+    return _run_sandy_pipeline(db, _ask_request_for_user(request, current_user))
 
 
 @app.post("/recommendations/{recommendation_id}/confirm")
 def confirm_recommendation_endpoint(
     recommendation_id: int,
     request: ConfirmRecommendationRequest = ConfirmRecommendationRequest(),
+    current_user: dict = Depends(get_current_user_dep),
     db=Depends(get_db),
 ) -> dict:
     try:
         contact_request = confirm_recommendation(
             db,
             recommendation_id=recommendation_id,
-            requester_name=request.requester_name,
-            notification_channel=request.notification_channel,
+            requester_employee_id=current_user["employee_id"],
+            requester_name=request.requester_name or current_user["name"],
+            notification_channel=request.notification_channel or "chat",
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return {
         "status": "ok",
-        "message": "Recommended contact has been notified.",
+        "message": "Chat message sent to the recommended contact.",
         "contact_request": contact_request,
     }
 
 
 @app.post("/contact-requests/{contact_request_id}/fulfilled")
-def contact_request_fulfilled(contact_request_id: int, db=Depends(get_db)) -> dict:
+def contact_request_fulfilled(
+    contact_request_id: int,
+    current_user: dict = Depends(get_current_user_dep),
+    db=Depends(get_db),
+) -> dict:
     try:
+        _get_contact_request_for_participant(db, contact_request_id, current_user)
         contact_request = mark_contact_request_fulfilled(db, contact_request_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     return {
         "status": "ok",
@@ -290,13 +349,20 @@ def contact_request_fulfilled(contact_request_id: int, db=Depends(get_db)) -> di
 
 
 @app.post("/feedback")
-def feedback(request: FeedbackRequest, db=Depends(get_db)) -> dict[str, str]:
+def feedback(
+    request: FeedbackRequest,
+    current_user: dict = Depends(get_current_user_dep),
+    db=Depends(get_db),
+) -> dict[str, str]:
     recommendation_id = request.recommendation_id
     try:
         if recommendation_id is None and request.contact_request_id is not None:
+            _get_contact_request_for_participant(db, request.contact_request_id, current_user)
             recommendation_id = recommendation_id_for_contact_request(db, request.contact_request_id)
         if recommendation_id is None:
             raise ValueError("Either recommendation_id or contact_request_id is required.")
+        if not _recommendation_belongs_to_user(db, recommendation_id, current_user):
+            raise PermissionError("You do not have access to this recommendation.")
 
         store_recommendation_feedback(
             db,
@@ -308,6 +374,8 @@ def feedback(request: FeedbackRequest, db=Depends(get_db)) -> dict[str, str]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     return {"status": "ok", "message": "Feedback recorded."}
 
@@ -355,6 +423,85 @@ def frontend_chat(
     }
 
 
+def _feedback_available_at(contact_request: ContactRequest | None):
+    if contact_request is None or contact_request.notified_at is None:
+        return None
+    return contact_request.notified_at + timedelta(seconds=FEEDBACK_PROMPT_DELAY_SECONDS)
+
+
+def _frontend_recommendations_for_chat_message(db, chat_message_id: int) -> tuple[list[dict], dict[int, dict]]:
+    recommendations = (
+        db.query(Recommendation)
+        .filter(
+            Recommendation.chat_message_id == chat_message_id,
+            Recommendation.recommendation_type == "first_contact",
+        )
+        .order_by(Recommendation.rank.asc())
+        .all()
+    )
+
+    frontend_recommendations: list[dict] = []
+    recommendation_states: dict[int, dict] = {}
+
+    for recommendation in recommendations:
+        employee = db.get(Employee, recommendation.recommended_employee_id)
+        if employee is None:
+            continue
+
+        contact_request = (
+            db.query(ContactRequest)
+            .filter(ContactRequest.recommendation_id == recommendation.id)
+            .order_by(ContactRequest.id.desc())
+            .first()
+        )
+        feedback_exists = (
+            db.query(RecommendationFeedback)
+            .filter(RecommendationFeedback.recommendation_id == recommendation.id)
+            .first()
+            is not None
+        )
+        available_at = _feedback_available_at(contact_request)
+
+        frontend_recommendations.append(
+            {
+                "recommendation_id": recommendation.id,
+                "employee_id": employee.id,
+                "name": employee.name,
+                "designation": employee.role or "",
+                "level": employee.level or "",
+                "department": employee.department or "",
+                "top_skills": [],
+                "reason": recommendation.reason or "",
+            }
+        )
+
+        if contact_request is None:
+            recommendation_states[recommendation.id] = {"status": "idle"}
+            continue
+
+        prompt_visible = bool(
+            available_at is not None
+            and available_at <= utcnow()
+            and not feedback_exists
+        )
+        recommendation_states[recommendation.id] = {
+            "contactRequestId": contact_request.id,
+            "status": "sent",
+            "message": "Chat message sent. The conversation is now available in direct messages.",
+            "feedbackAvailableAt": available_at.isoformat() if available_at else None,
+            "feedbackPromptVisible": prompt_visible,
+            "feedbackSubmitted": feedback_exists,
+            "feedbackStatus": "sent" if feedback_exists else "idle",
+            "feedbackMessage": (
+                "Thanks. Sandy will use this feedback for future routing."
+                if feedback_exists
+                else None
+            ),
+        }
+
+    return frontend_recommendations, recommendation_states
+
+
 @app.get("/api/chat/history")
 def get_chat_history(
     session_id: str,
@@ -365,18 +512,34 @@ def get_chat_history(
         db.query(ChatMessage)
         .filter(
             ChatMessage.session_id == session_id,
-            ChatMessage.user_name == current_user["name"],
+            or_(
+                ChatMessage.user_id == current_user["employee_id"],
+                and_(
+                    ChatMessage.user_id.is_(None),
+                    ChatMessage.user_name == current_user["name"],
+                ),
+            ),
         )
         .order_by(ChatMessage.created_at.asc())
         .all()
     )
-    return [
-        {
-            "id": msg.id,
-            "session_id": msg.session_id,
-            "message": msg.message,
-            "bot_response": msg.bot_response,
-            "created_at": msg.created_at,
-        }
-        for msg in messages
-    ]
+    history = []
+    for msg in messages:
+        recommendations, recommendation_states = _frontend_recommendations_for_chat_message(db, msg.id)
+        history.append(
+            {
+                "id": msg.id,
+                "session_id": msg.session_id,
+                "message": msg.message,
+                "bot_response": msg.bot_response,
+                "created_at": msg.created_at,
+                "detected_topic": msg.detected_topic,
+                "recommendations": recommendations,
+                "recommendation_states": recommendation_states,
+                "confirmation_required": bool(
+                    recommendations
+                    and any(state.get("status") == "idle" for state in recommendation_states.values())
+                ),
+            }
+        )
+    return history

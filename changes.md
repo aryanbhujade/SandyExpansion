@@ -1,5 +1,13 @@
 # Changes Made
 
+## Current Database And Notification Direction
+
+The current implementation uses one local SQLite database, `backend/sandy_connect.db`, for both authentication and Sandy Connect application data. The old separate `auth.db` / `auth_database.py` direction has been removed.
+
+Public self-signup has also been removed. Demo credentials are seeded/admin-provisioned from existing employee records, and users only log in through `POST /api/auth/login`.
+
+Recommendation confirmations now create an internal direct chat message for the recommended employee and store an audit row in `outgoing_notifications`. They do not send real SMTP email. See `DATABASE.md` for the current schema, relationships, and data-flow documentation.
+
 ## Fine-tuning Features (User Profile, Time-sorted DMs, Unread Badges, Notifications, and gitignore Cleanup)
 
 A set of UI polish and fine-tuning improvements were implemented to support direct messaging workflow, user identity, and repository cleanup:
@@ -671,4 +679,3 @@ cd backend
 This seeds login credentials for all 15 employees. See `mock_user_credentials.md` for the full list.
 
 All test accounts use the password: `Password123!`
-

@@ -102,14 +102,31 @@ function RecommendationCard({
   canNotify,
   notificationState,
   onNotify,
+  onFeedbackSubmit,
 }: {
   recommendation: RecommendationItem;
   canNotify: boolean;
   notificationState?: RecommendationNotificationState;
   onNotify: () => void;
+  onFeedbackSubmit: (feedback: { was_useful: boolean; rating: number; feedback_text?: string }) => void;
 }) {
   const notificationStatus = notificationState?.status;
   const notificationMessage = notificationState?.message;
+  const feedbackVisible = Boolean(notificationState?.feedbackPromptVisible && !notificationState.feedbackSubmitted);
+  const feedbackStatus = notificationState?.feedbackStatus;
+  const feedbackMessage = notificationState?.feedbackMessage;
+  const [wasUseful, setWasUseful] = useState<boolean | null>(null);
+  const [rating, setRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+
+  const handleFeedbackSubmit = () => {
+    if (wasUseful === null || feedbackStatus === 'sending') return;
+    onFeedbackSubmit({
+      was_useful: wasUseful,
+      rating,
+      feedback_text: feedbackText.trim() || undefined,
+    });
+  };
 
   return (
     <div className="rounded-3xl border border-white/8 bg-[#1d1d1d] p-4 text-sm text-zinc-300 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.8)]">
@@ -143,7 +160,7 @@ function RecommendationCard({
       {canNotify && notificationStatus !== 'sent' && (
         <div className="mt-4 rounded-2xl border border-emerald-500/12 bg-emerald-500/[0.05] p-3">
           <p className="text-xs leading-5 text-zinc-300">
-            Notify this expert that you would like an introduction.
+            Send this expert a direct chat message that you may contact them.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
@@ -157,7 +174,7 @@ function RecommendationCard({
               ) : (
                 <Mail className="mr-1.5 h-3.5 w-3.5" />
               )}
-              {notificationStatus === 'sending' ? 'Notifying...' : 'Notify contact'}
+              {notificationStatus === 'sending' ? 'Sending...' : 'Send chat message'}
             </Button>
             {notificationStatus === 'error' && notificationMessage && (
               <span className="inline-flex items-center text-xs text-amber-300">
@@ -170,9 +187,101 @@ function RecommendationCard({
       )}
 
       {notificationStatus === 'sent' && notificationMessage && (
-        <div className="mt-4 inline-flex items-start gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] px-3 py-2 text-xs text-emerald-200">
+        <div className="mt-4 space-y-3">
+          <div className="inline-flex items-start gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] px-3 py-2 text-xs text-emerald-200">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{notificationMessage}</span>
+          </div>
+          {!feedbackVisible && !notificationState?.feedbackSubmitted && (
+            <p className="text-xs text-zinc-500">
+              Sandy will ask for feedback on this recommendation in about 2 minutes.
+            </p>
+          )}
+        </div>
+      )}
+
+      {feedbackVisible && (
+        <div className="mt-4 rounded-2xl border border-sky-500/15 bg-sky-500/[0.05] p-3">
+          <p className="text-xs font-medium text-sky-100">
+            Did this recommendation help solve your query?
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-8 rounded-full border px-3 text-xs ${
+                wasUseful === true
+                  ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200'
+                  : 'border-white/8 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'
+              }`}
+              onClick={() => setWasUseful(true)}
+            >
+              Yes
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className={`h-8 rounded-full border px-3 text-xs ${
+                wasUseful === false
+                  ? 'border-amber-500/30 bg-amber-500/15 text-amber-200'
+                  : 'border-white/8 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]'
+              }`}
+              onClick={() => setWasUseful(false)}
+            >
+              Not really
+            </Button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRating(value)}
+                className={`h-7 w-7 rounded-full border text-xs transition-colors ${
+                  rating === value
+                    ? 'border-sky-400/40 bg-sky-400/15 text-sky-100'
+                    : 'border-white/8 bg-white/[0.03] text-zinc-400 hover:text-white'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={feedbackText}
+            onChange={(event) => setFeedbackText(event.target.value)}
+            placeholder="Optional note"
+            rows={2}
+            className="mt-3 w-full resize-none rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-sky-400/30"
+          />
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              className="h-8 rounded-full bg-white px-3 text-xs font-semibold text-black hover:bg-zinc-200 disabled:opacity-60"
+              disabled={wasUseful === null || feedbackStatus === 'sending'}
+              onClick={handleFeedbackSubmit}
+            >
+              {feedbackStatus === 'sending' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Submit feedback
+            </Button>
+            {feedbackStatus === 'error' && feedbackMessage && (
+              <span className="inline-flex items-center text-xs text-amber-300">
+                <AlertCircle className="mr-1 h-3.5 w-3.5" />
+                {feedbackMessage}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {notificationState?.feedbackSubmitted && feedbackMessage && (
+        <div className="mt-4 inline-flex items-start gap-2 rounded-2xl border border-sky-500/20 bg-sky-500/[0.08] px-3 py-2 text-xs text-sky-100">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{notificationMessage}</span>
+          <span>{feedbackMessage}</span>
         </div>
       )}
     </div>
@@ -253,10 +362,10 @@ function NotificationPanel({
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-white truncate">{notif.topic}</p>
                     <p className="mt-1 text-xs text-zinc-400">
-                      {notif.requester_id ? `From: ${notif.requester_id}` : 'Contact request'}
+                      {notif.requester_name || notif.requester_id ? `From: ${notif.requester_name || notif.requester_id}` : 'Contact request'}
                     </p>
                     <p className="mt-1 text-xs text-zinc-500">
-                      {notif.channel === 'email' ? '📧 Email' : '🔔 In-app'} · {formatRelativeTime(notif.created_at)}
+                      {notif.channel === 'chat' ? 'Chat message' : 'Notification'} · {formatRelativeTime(notif.created_at)}
                     </p>
                   </div>
                 </div>
@@ -295,6 +404,7 @@ export default function ChatPage() {
     isTyping,
     sendMessage,
     confirmRecommendation,
+    submitRecommendationFeedback,
     clearChat,
     backendAvailable,
   } = useChatContext();
@@ -344,8 +454,7 @@ export default function ChatPage() {
     employeeApi.list({ limit: 100 })
       .then(data => {
         if (!cancelled && user) {
-          const currentUserId = user.employee_id || (user as any).id;
-          setEmployees(data.filter(emp => emp.employee_id !== currentUserId));
+          setEmployees(data.filter(emp => emp.employee_id !== user.employee_id));
         }
       })
       .catch(() => {
@@ -1007,6 +1116,11 @@ export default function ChatPage() {
                                           onNotify={() => {
                                             if (recommendationId !== undefined) {
                                               confirmRecommendation(message.id, recommendationId);
+                                            }
+                                          }}
+                                          onFeedbackSubmit={(feedback) => {
+                                            if (recommendationId !== undefined) {
+                                              submitRecommendationFeedback(message.id, recommendationId, feedback);
                                             }
                                           }}
                                         />

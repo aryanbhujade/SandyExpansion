@@ -14,13 +14,15 @@ import type {
   EmployeeProfileData,
   ProfileUpdatePayload,
   ActiveConversation,
+  FeedbackRequest,
+  FeedbackResponse,
 } from '@/types';
 
 // ---------- Axios Instance ----------
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const REQUESTER_ID = import.meta.env.VITE_DEFAULT_REQUESTER_ID || 'EMP0001';
-const REQUESTER_NAME = import.meta.env.VITE_DEFAULT_REQUESTER_NAME || 'Aryan';
+const TOKEN_KEY = 'internbot_token';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -32,7 +34,7 @@ const apiClient: AxiosInstance = axios.create({
 
 // Add interceptor to include JWT token
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('internbot_token');
+  const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -49,11 +51,6 @@ export const authApi = {
   
   async getMe() {
     const { data } = await apiClient.get('/api/auth/me');
-    return data;
-  },
-
-  async register(name: string, email: string, password: string) {
-    const { data } = await apiClient.post('/api/auth/register', { name, email, password });
     return data;
   }
 };
@@ -89,17 +86,18 @@ export const chatApi = {
     return data;
   },
 
-  async confirmRecommendation(
-    recommendationId: number,
-    requesterName?: string
-  ): Promise<ConfirmRecommendationResponse> {
+  async confirmRecommendation(recommendationId: number): Promise<ConfirmRecommendationResponse> {
     const { data } = await apiClient.post<ConfirmRecommendationResponse>(
       `/recommendations/${recommendationId}/confirm`,
       {
-        requester_name: requesterName || REQUESTER_NAME,
-        notification_channel: 'email',
+        notification_channel: 'chat',
       }
     );
+    return data;
+  },
+
+  async submitFeedback(payload: FeedbackRequest): Promise<FeedbackResponse> {
+    const { data } = await apiClient.post<FeedbackResponse>('/feedback', payload);
     return data;
   },
 };

@@ -143,6 +143,9 @@ def _manager_recommendation(context: dict) -> dict[str, list[dict[str, Any]]]:
 
 def recommend_contacts(context: dict) -> dict:
     analysis = context.get("analysis") or {}
+    if not analysis.get("needs_contact"):
+        return {"recommended_contacts": [], "escalation_contacts": []}
+
     if analysis.get("primary_intent") == "manager_lookup":
         return _manager_recommendation(context)
 

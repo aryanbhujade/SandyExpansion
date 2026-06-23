@@ -67,15 +67,39 @@ export interface ConfirmRecommendationResponse {
     contact_request_id: number;
     recommendation_id: number;
     topic: string | null;
+    requester_employee_id?: string | null;
     recommended_employee_id: string;
     status: string;
     notification_message: string;
+    feedback_available_at?: string | null;
+    direct_message_id?: number | null;
+    direct_message?: {
+      id: number;
+      sender_id: string;
+      receiver_id: string;
+      message: string;
+      timestamp: string | null;
+    };
     notification?: {
       recipient_email: string | null;
+      channel?: string;
       subject: string;
       status: string;
     };
   };
+}
+
+export interface FeedbackRequest {
+  recommendation_id?: number;
+  contact_request_id?: number;
+  was_useful?: boolean;
+  rating?: number;
+  feedback_text?: string;
+}
+
+export interface FeedbackResponse {
+  status: string;
+  message: string;
 }
 
 // ---------- Notifications ----------
@@ -85,8 +109,9 @@ export interface Notification {
   chat_log_id: number;
   notified_emp_id: string;
   requester_id: string;
-  channel: 'email' | 'in_app';
-  status: 'pending' | 'sent' | 'failed' | 'read';
+  requester_name?: string | null;
+  channel: 'email' | 'in_app' | 'chat' | string;
+  status: 'pending' | 'sent' | 'failed' | 'read' | 'sent_chat' | string;
   topic: string;
   sent_at: string | null;
   read_at: string | null;
@@ -99,6 +124,11 @@ export interface RecommendationNotificationState {
   contactRequestId?: number;
   status: 'idle' | 'sending' | 'sent' | 'error';
   message?: string;
+  feedbackAvailableAt?: string | null;
+  feedbackPromptVisible?: boolean;
+  feedbackSubmitted?: boolean;
+  feedbackStatus?: 'idle' | 'sending' | 'sent' | 'error';
+  feedbackMessage?: string;
 }
 
 export interface Message {

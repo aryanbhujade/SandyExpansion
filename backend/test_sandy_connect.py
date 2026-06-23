@@ -44,6 +44,27 @@ EXAMPLE_MESSAGES = [
         "user_level": "L2",
         "user_role": "Programmer Analyst",
         "user_department": "Technology",
+        "message": "Who knows Kubernetes deployment pipelines?",
+    },
+    {
+        "user_name": "Aryan",
+        "user_level": "L2",
+        "user_role": "Programmer Analyst",
+        "user_department": "Technology",
+        "message": "Hi Sandy",
+    },
+    {
+        "user_name": "Aryan",
+        "user_level": "L2",
+        "user_role": "Programmer Analyst",
+        "user_department": "Technology",
+        "message": "Thanks",
+    },
+    {
+        "user_name": "Aryan",
+        "user_level": "L2",
+        "user_role": "Programmer Analyst",
+        "user_department": "Technology",
         "message": "Can you order pizza for me?",
     },
 ]

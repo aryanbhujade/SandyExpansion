@@ -52,7 +52,7 @@ export default function ProfileModal({ isOpen, onClose, employeeId, onProfileUpd
         setProjects((data.projects || []).join(', '));
         setExpertise((data.expertise_topics || []).join(', '));
         setNotes(data.notes || '');
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching profile:', err);
         setError('Failed to load profile details. Please try again.');
       } finally {
@@ -94,7 +94,7 @@ export default function ProfileModal({ isOpen, onClose, employeeId, onProfileUpd
       setTimeout(() => {
         onClose();
       }, 1200);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating profile:', err);
       setError('Failed to update profile. Please try again.');
     } finally {

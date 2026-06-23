@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { BotMessageSquare, Mail, Lock, ArrowRight, ArrowLeft } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -125,10 +125,7 @@ export default function SignInPage() {
 
           <div className="mt-8 text-center">
             <p className="text-sm text-zinc-400">
-              New to InternBot?{" "}
-              <Link to="/signup" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
-                Sign up
-              </Link>
+              Use your seeded Sandy Connect employee credentials.
             </p>
           </div>
         </Card>

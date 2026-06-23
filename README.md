@@ -1,6 +1,6 @@
 # Sandy Connect — Internal Company Assistant & Peer-to-Peer Chat
 
-Sandy Connect is a hierarchy-aware internal company talent intelligence assistant and peer-to-peer chat system. It uses a **FastAPI backend**, a **React/Vite (TypeScript) frontend**, SQLite databases, and a local **Ollama Mistral LLM** for request analysis and expert discovery.
+Sandy Connect is a hierarchy-aware internal company talent intelligence assistant and peer-to-peer chat system. It uses a **FastAPI backend**, a **React/Vite (TypeScript) frontend**, one local SQLite database, and a local **Ollama Mistral LLM** for request analysis and expert discovery.
 
 ---
 
@@ -85,7 +85,7 @@ cp .env.example .env
 ```bash
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
-- **Auto-Seeding:** On startup, the backend automatically creates SQLite databases (`sandy_connect.db` and `sandy_auth.db`) and seeds them with mock employee profiles and credentials if empty.
+- **Auto-Seeding:** On startup, the backend automatically creates `sandy_connect.db` and seeds it with mock employee profiles plus default credentials if empty.
 - **Verification:** You can check if the backend is healthy by visiting `http://127.0.0.1:8000/health` in your browser.
 
 ---
@@ -119,16 +119,25 @@ The application is pre-seeded with several employee profiles. You can sign in us
 
 **Default Password:** `Password123!`
 
-| Name | Designation | Username (Email) |
+There is no public self-signup flow. Demo/local accounts are created from the seeded employee directory, and users sign in with their assigned credentials.
+
+| Name | Role | Username (Email) |
 | :--- | :--- | :--- |
-| **Anudit Sinha** | Cloud Engineer | `anudit@example.com` |
+| **Anudit Sinha** | Associate Manager | `anudit@example.com` |
 | **Aryan Mehta** | Programmer Analyst | `aryan@example.com` |
 | **Priya Nair** | Senior Consultant | `priya.nair@example.com` |
-| **Ravi Menon** | Lead Architect | `ravi.menon@example.com` |
-| **Meera Shah** | Associate Consultant | `meera.shah@example.com` |
-| **Harish Idilingotter** | Manager | `harish@example.com` |
-| **Nisha Varma** | Senior Developer | `nisha.varma@example.com` |
-| **Karan Bedi** | QA Analyst | `karan.bedi@example.com` |
+| **Ravi Menon** | Lead DevOps Engineer | `ravi.menon@example.com` |
+| **Meera Shah** | Business Systems Analyst | `meera.shah@example.com` |
+| **Harish Idilingotter** | Associate Manager | `harish@example.com` |
+| **Nisha Varma** | Marketing Coordinator | `nisha.varma@example.com` |
+| **Karan Bedi** | Solutions Consultant | `karan.bedi@example.com` |
+| **Sofia Thomas** | Corporate Operations Manager | `sofia.thomas@example.com` |
+| **Vikram Rao** | Senior Architect | `vikram.rao@example.com` |
+| **Lena Kapoor** | Marketing Lead | `lena.kapoor@example.com` |
+| **Maya Iyer** | Principal Architect | `maya.iyer@example.com` |
+| **Neil D'Souza** | Sales Director | `neil.dsouza@example.com` |
+| **Grace Fernandes** | Head of Corporate | `grace.fernandes@example.com` |
+| **Dev Malhotra** | CTO | `dev.malhotra@example.com` |
 
 ---
 
@@ -142,9 +151,23 @@ python test_sandy_connect.py
 ```
 This script runs a series of mock searches (e.g., *"Who works best for AWS?"*) through the backend query parser and contact ranker and prints out grounded recommendations.
 
+### Reset Local Demo Database
+
+To return the local database to the original seeded employee/knowledge state, stop the backend server and run:
+
+```bash
+cd backend
+source .venv/bin/activate
+python reset_database.py --yes
+```
+
+This keeps only the seeded employees, employee profiles, responsibility topics, and demo credentials. It clears chat history, direct messages, recommendations, contact requests, notifications, and feedback.
+
 ---
 
 ## ⚙️ Configuration Notes
-- **Email Notifications:** Email delivery is mocked; outgoing email details are logged and stored in the database but not sent to real SMTP hosts.
+- **Recommendation Confirmations:** When a user confirms a recommendation, Sandy creates a direct chat message from the requester to the recommended employee and stores a lightweight notification/audit record.
+- **Delayed Feedback:** Sandy waits two minutes after a recommendation is confirmed, then asks the requester whether the recommendation helped. Once shown, the prompt stays available after switching chats or reloading until feedback is submitted.
 - **Offline Fallback:** If Ollama is not running, the backend falls back to standard keyword-matching logic to parse searches and find contacts.
 - **Vite Environment:** Change API endpoints in `frontend/.env` if running the backend on a different port or host.
+- **Database Design:** See [`DATABASE.md`](DATABASE.md) for schema relationships, data flows, and confidentiality rules.

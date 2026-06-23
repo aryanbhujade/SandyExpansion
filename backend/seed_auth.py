@@ -8,7 +8,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import bcrypt
 from sqlalchemy.orm import Session
 
-from app.auth_database import AuthSessionLocal, UserCredential, init_auth_db
+from app.database import Employee, SessionLocal, UserCredential, init_db
+from app.services.seed_data import seed_database
 
 def get_password_hash(password: str) -> str:
     # Hash password using bcrypt directly
@@ -17,8 +18,8 @@ def get_password_hash(password: str) -> str:
     return hashed.decode('utf-8')
 
 def main():
-    print("Initializing auth database...")
-    init_auth_db()
+    print("Initializing Sandy database...")
+    init_db()
     
     seed_file = os.path.join("data", "seed_employees.json")
     if not os.path.exists(seed_file):
@@ -28,13 +29,16 @@ def main():
     with open(seed_file, "r") as f:
         employees = json.load(f)
 
-    db: Session = AuthSessionLocal()
+    db: Session = SessionLocal()
     default_password = "Password123!"
     hashed_password = get_password_hash(default_password)
     
     print(f"Seeding credentials for {len(employees)} employees with default password: {default_password}")
     
     try:
+        if db.query(Employee).count() == 0:
+            seed_database(db)
+
         for emp in employees:
             existing_user = db.query(UserCredential).filter(UserCredential.employee_id == emp["id"]).first()
             if not existing_user:

@@ -94,7 +94,7 @@ def _load_seed_file() -> list[dict[str, Any]]:
     return data
 
 
-def _upsert_employee(db, item: dict[str, Any]) -> Employee:
+def _upsert_employee(db, item: dict[str, Any], include_manager: bool = True) -> Employee:
     employee = db.get(Employee, item["id"])
     if employee is None:
         employee = Employee(id=item["id"])
@@ -106,7 +106,7 @@ def _upsert_employee(db, item: dict[str, Any]) -> Employee:
     employee.role = item.get("role")
     employee.department = item.get("department")
     employee.business_unit = item.get("business_unit")
-    employee.manager_id = item.get("manager_id")
+    employee.manager_id = item.get("manager_id") if include_manager else None
     employee.location = item.get("location")
     return employee
 
@@ -143,7 +143,13 @@ def _upsert_responsibility_topic(db, item: dict[str, Any]) -> ResponsibilityTopi
 def seed_database(db) -> dict[str, int]:
     employees = _load_seed_file()
     for item in employees:
-        _upsert_employee(db, item)
+        _upsert_employee(db, item, include_manager=False)
+    db.flush()
+
+    for item in employees:
+        employee = db.get(Employee, item["id"])
+        if employee is not None:
+            employee.manager_id = item.get("manager_id")
         _upsert_profile(db, item)
 
     for topic in RESPONSIBILITY_TOPICS:

@@ -6,11 +6,20 @@ import LandingPage from "./pages/LandingPage"
 import ChatPage from "./pages/ChatPage"
 import SignInPage from "./pages/SignInPage"
 import HierarchyPage from "./pages/HierarchyPage"
+import AnalyticsPage from "./pages/AnalyticsPage"
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-emerald-500">Loading...</div>
   if (!user) return <Navigate to="/signin" replace />
+  return <>{children}</>
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-emerald-500">Loading...</div>
+  if (!user) return <Navigate to="/signin" replace />
+  if (!user.is_admin) return <Navigate to="/chat" replace />
   return <>{children}</>
 }
 
@@ -32,6 +41,14 @@ function App() {
                     <ChatPage />
                   </ChatProvider>
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <AdminRoute>
+                  <AnalyticsPage />
+                </AdminRoute>
               }
             />
           </Routes>

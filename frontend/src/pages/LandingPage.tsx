@@ -7,12 +7,14 @@ import TextMarque from "@/components/ui/text-marque"
 import HeroText from "@/components/ui/hero-shutter-text"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { BotMessageSquare, Users, Building, GraduationCap, Network, Sparkles, ArrowRight, Zap, Shield, Search } from "lucide-react"
+import { BotMessageSquare, Users, Building, GraduationCap, Network, Sparkles, ArrowRight, Zap, Shield, Search, BarChart3 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { motion, type Variants } from "framer-motion"
+import { useAuth } from "@/context/AuthContext"
 
 export default function LandingPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
@@ -129,6 +131,17 @@ export default function LandingPage() {
                 <Search className="w-4 h-4 mr-2 text-emerald-400/60" />
                 <span>Explore Experts</span>
               </Button>
+
+              {user?.is_admin && (
+                <Button
+                  variant="outline"
+                  className="border-emerald-500/30 bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-300 rounded-full px-8 h-12 flex items-center space-x-2"
+                  onClick={() => navigate('/analytics')}
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  <span>Analytics &amp; Admin</span>
+                </Button>
+              )}
             </motion.div>
 
             {/* Separator */}

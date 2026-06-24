@@ -8,6 +8,7 @@ export interface User {
   level: string;
   role: string;
   department: string;
+  is_admin?: boolean;
 }
 
 interface AuthContextType {
@@ -58,7 +59,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(userData);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Best-effort: token is cleared client-side regardless.
+    }
     sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
     setUser(null);

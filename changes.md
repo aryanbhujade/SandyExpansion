@@ -679,3 +679,170 @@ cd backend
 This seeds login credentials for all 15 employees. See `mock_user_credentials.md` for the full list.
 
 All test accounts use the password: `Password123!`
+
+---
+
+## Phase 3 — Analytics CRUD, RBAC Admin & Production Auth Hardening
+
+Date: 2026-06-24
+
+### Scope
+
+Adds an admin-only analytics/dashboard layer, role-based access control (RBAC) for
+admin endpoints, and production authentication hardening. This closes two of the
+gaps called out in the root `IMPLEMENTATION_STATUS.md`:
+
+- "Analytics CRUD — REST analytics endpoints — Missing"
+- "RBAC admin / prod auth hardening — Not implemented"
+
+### Authorization model
+
+An **admin is a normal user, not a separate account system.**
+
+- The existing `employees` + `credentials` tables and `POST /api/auth/login` are reused. There is no separate admin table or login.
+- A new `is_admin` boolean column was added to `credentials`, kept separate from `Employee.role` (the job title).
+- `is_admin` is included in the JWT claims and the `/api/auth/me` response.
+- A `require_admin_dep` FastAPI dependency gates admin-only endpoints (returns `403`).
+- On startup, `_ensure_admin_credential` promotes the credential matching `SANDY_ADMIN_EMAIL` (default `dev.malhotra@example.com`, the seeded CTO). Same password as everyone else (`Password123!`).
+- The frontend exposes `user.is_admin`; an `AdminRoute` guard plus an admin-only nav entry show the analytics workspace only to admins.
+
+Rejected alternatives: deriving admin from `level >= L16` (fragile, couples auth to job titles), and a separate `admins` table + login (duplicates auth, breaks the "one identity = `employees.id`" rule documented in `DATABASE.md`).
+
+### Backend — New Files
+
+#### `backend/app/analytics.py`
+
+Admin-only (`require_admin_dep`) analytics router mounted at `/api/analytics`:
+
+- `GET /api/analytics/summary` — totals (employees, active users, chat messages, recommendations, confirmed, fulfilled, feedback, direct messages, notifications, unread), average rating + useful %, top requested topics, recommendations by department.
+- `GET /api/analytics/recommendations?page=&limit=` — recommendations with requester, recommended employee, topic, score, contact-request status, and feedback.
+- `GET /api/analytics/feedback?page=&limit=` — submitted feedback joined to topic and recommended employee.
+- `GET /api/analytics/chat-messages?page=&limit=` — Sandy bot chat log with recommendation count per message.
+- `DELETE /api/analytics/chat-messages/{id}` — admin moderation: deletes a chat message and its recommendations, contact requests, outgoing notifications, and feedback. Employee direct messages are intentionally left intact.
+- `DELETE /api/analytics/feedback/{id}` — admin moderation: deletes a single feedback entry.
+
+### Backend — Modified Files
+
+#### `backend/app/database.py`
+
+- Added `is_admin` boolean column to `UserCredential` (default `False`, server default `"0"`).
+- Added SQLite migration `_ensure_sqlite_column("credentials", "is_admin", "BOOLEAN DEFAULT 0")` to existing `_ensure_local_schema_updates`, so existing local databases are upgraded on startup.
+
+#### `backend/app/auth.py`
+
+Production auth hardening + RBAC:
+
+- JWT secret resolved from `SANDY_JWT_SECRET`. In `SANDY_ENV=production` the absence of a secret is **fatal** (refuses to start with an insecure default). In development an ephemeral secret is generated with a warning.
+- Access token lifetime configurable via `SANDY_ACCESS_TOKEN_MINUTES` (default `10080` = 7 days).
+- Tokens now carry a `jti`; an in-memory revoked-token set powers `POST /api/auth/logout` (jti-based revocation). Restart clears the set (acceptable for the local SQLite setup; a production deployment would back this with a persistent store).
+- `is_admin` included in the login user payload, the `/api/auth/me` response, and the user dict returned by `get_current_user_dep`.
+- New `require_admin_dep` dependency (403 if not admin).
+- New `POST /api/auth/logout` endpoint.
+- `ExpiredSignatureError` now returns a distinct 401 ("Token expired").
+
+#### `backend/app/main.py`
+
+- Registered `analytics_router` at `/api/analytics`.
+- `/admin/seed` now requires `require_admin_dep` (was only `get_current_user_dep`).
+- New startup helper `_ensure_admin_credential(db)` promotes the configured admin on every startup, and is called after credential seeding in `on_startup`.
+
+#### `backend/seed_auth.py`
+
+- Marks the credential matching `SANDY_ADMIN_EMAIL` as admin during seeding (new and existing rows).
+
+#### `backend/.env.example` / `backend/.env`
+
+Added auth hardening variables:
+
+```env
+SANDY_ENV=development
+SANDY_JWT_SECRET=change-me-for-local-development
+SANDY_ACCESS_TOKEN_MINUTES=10080
+SANDY_ADMIN_EMAIL=dev.malhotra@example.com
+```
+
+### Frontend — New Files
+
+#### `frontend/src/pages/AnalyticsPage.tsx`
+
+Admin-only analytics dashboard at `/analytics`. Matches the existing glassmorphic dark UI (same `bg-[#0b0b0c]`, emerald accents, `Card`/`Button` components, Framer Motion) as the hierarchy and sign-in pages. Renders:
+
+- Summary metric cards (employees, active users, chat messages, recommendations, confirmed, fulfilled, feedback, direct messages).
+- Average rating + useful-percentage highlight, and top requested topics.
+- Tabbed tables: Recommendations, Feedback, Chat Log — each with pagination.
+- Admin moderation delete actions on the Feedback and Chat Log tables.
+
+### Frontend — Modified Files
+
+#### `frontend/src/App.tsx`
+
+- Added `AdminRoute` (redirects non-admins to `/chat`).
+- Added `/analytics` route guarded by `AdminRoute`.
+
+#### `frontend/src/context/AuthContext.tsx`
+
+- `User` interface now includes optional `is_admin`.
+- `logout()` now calls `POST /api/auth/logout` (best-effort revocation) before clearing the client-side token.
+
+#### `frontend/src/services/api.ts`
+
+- `authApi.logout()` added.
+- New `analyticsApi` (getSummary, getRecommendations, getFeedback, getChatMessages, deleteChatMessage, deleteFeedback).
+
+#### `frontend/src/types/index.ts`
+
+- Added `AnalyticsSummary`, `AnalyticsRecommendation`, `AnalyticsFeedback`, `AnalyticsChatMessage`, and `Paginated<T>` types.
+
+#### `frontend/src/pages/ChatPage.tsx`
+
+- Added an admin-only emerald "Analytics & Admin" icon button in the chat header (next to the notification bell) so the dashboard is reachable after login, not only from the landing page.
+
+#### `frontend/src/pages/LandingPage.tsx`
+
+- Added an admin-only "Analytics & Admin" CTA button in the landing page actions row.
+
+### Setup changes vs. previous phases
+
+The run steps are unchanged, but the backend now reads additional environment variables (all optional with sensible defaults, included in `backend/.env.example`):
+
+- `SANDY_ENV` — `development` (default) or `production`.
+- `SANDY_JWT_SECRET` — JWT signing secret. **Required when `SANDY_ENV=production`.**
+- `SANDY_ACCESS_TOKEN_MINUTES` — access token lifetime (default `10080` = 7 days).
+- `SANDY_ADMIN_EMAIL` — credential promoted to admin on startup (default `dev.malhotra@example.com`).
+
+To try the new admin/analytics features after pulling:
+
+1. Restart the backend so the startup migration + admin promotion run (look for `Promoted dev.malhotra@example.com to admin.` in the logs).
+2. Log in as `dev.malhotra@example.com` / `Password123!` (the admin claim is baked into the JWT at login, so a fresh login is required).
+3. Open the Analytics button in the chat header (or the landing page CTA).
+
+### Verification
+
+- `python -c "import app.main"` — backend imports clean; OpenAPI exposes `/api/analytics/*`, `/api/auth/logout`, and admin-gated `/admin/seed`.
+- `npm run build` — 0 TypeScript errors, production build succeeds.
+- Existing local databases are auto-migrated (the `is_admin` column is added on startup), so no manual reset is required. If the admin-promotion log line is missing on an older DB, run `python reset_database.py --yes` and restart.
+
+### Files Added (Phase 3)
+
+- `backend/app/analytics.py`
+- `frontend/src/pages/AnalyticsPage.tsx`
+
+### Files Modified (Phase 3)
+
+- `backend/app/database.py`
+- `backend/app/auth.py`
+- `backend/app/main.py`
+- `backend/seed_auth.py`
+- `backend/.env.example`
+- `backend/.env`
+- `frontend/src/App.tsx`
+- `frontend/src/context/AuthContext.tsx`
+- `frontend/src/services/api.ts`
+- `frontend/src/types/index.ts`
+- `frontend/src/pages/ChatPage.tsx`
+- `frontend/src/pages/LandingPage.tsx`
+
+### Repo cleanup
+
+- Untracked the previously-committed `.DS_Store` (already covered by `.gitignore` going forward).
+- Reverted an accidental trailing-newline change in `frontend/tsconfig.app.json`.

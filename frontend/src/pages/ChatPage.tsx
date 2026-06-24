@@ -4,6 +4,7 @@ import {
   AlertCircle,
   LogOut,
   Bell,
+  BarChart3,
   Bot,
   CheckCircle2,
   Code,
@@ -972,6 +973,17 @@ export default function ChatPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                {user?.is_admin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-2xl border border-emerald-500/30 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/40 hover:text-emerald-200"
+                    onClick={() => navigate('/analytics')}
+                    title="Analytics & Admin"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                  </Button>
+                )}
                 {/* Notification Bell */}
                 <Button
                   variant="ghost"

@@ -33,10 +33,11 @@ from app.services.local_llm import get_llm_settings
 from app.services.recommendation_engine import recommend_contacts
 from app.services.request_analyser import analyse_user_request
 from app.services.seed_data import seed_database
-from app.auth import get_current_user_dep, router as auth_router
+from app.auth import get_current_user_dep, require_admin_dep, router as auth_router
 from app.messages import router as messages_router
 from app.employees import router as employees_router
 from app.notifications import router as notifications_router
+from app.analytics import router as analytics_router
 
 app = FastAPI(title="Sandy Connect Backend", version="0.1.0")
 
@@ -52,6 +53,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(messages_router, prefix="/api/messages", tags=["messages"])
 app.include_router(employees_router, prefix="/api/employees", tags=["employees"])
 app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"])
+app.include_router(analytics_router, prefix="/api/analytics", tags=["analytics"])
 
 
 class AskRequest(BaseModel):
@@ -107,6 +109,25 @@ def _seed_credentials_if_empty(db) -> None:
     print("Successfully auto-seeded credentials.")
 
 
+def _ensure_admin_credential(db) -> None:
+    """Promote the configured admin account so RBAC has at least one admin."""
+    import os
+
+    admin_email = os.getenv("SANDY_ADMIN_EMAIL", "dev.malhotra@example.com").strip().lower()
+    credential = db.query(UserCredential).filter(UserCredential.email == admin_email).first()
+    if credential is None:
+        print(
+            f"WARNING: No credential found for SANDY_ADMIN_EMAIL={admin_email}. "
+            "No admin account will be available until one is promoted manually."
+        )
+        return
+
+    if not credential.is_admin:
+        credential.is_admin = True
+        db.commit()
+        print(f"Promoted {admin_email} to admin.")
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
@@ -117,6 +138,7 @@ def on_startup() -> None:
             print("Sandy Connect database is empty. Auto-seeding...")
             seed_database(session)
         _seed_credentials_if_empty(session)
+        _ensure_admin_credential(session)
     finally:
         session.close()
 
@@ -287,7 +309,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/admin/seed")
-def admin_seed(current_user: dict = Depends(get_current_user_dep), db=Depends(get_db)) -> dict:
+def admin_seed(current_user: dict = Depends(require_admin_dep), db=Depends(get_db)) -> dict:
     init_db()
     counts = seed_database(db)
     return {"status": "ok", "seeded": counts, "requested_by": current_user["employee_id"]}

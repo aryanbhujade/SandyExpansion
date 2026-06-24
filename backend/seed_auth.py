@@ -20,7 +20,7 @@ def get_password_hash(password: str) -> str:
 def main():
     print("Initializing Sandy database...")
     init_db()
-    
+
     seed_file = os.path.join("data", "seed_employees.json")
     if not os.path.exists(seed_file):
         print(f"Seed file not found at {seed_file}")
@@ -32,25 +32,31 @@ def main():
     db: Session = SessionLocal()
     default_password = "Password123!"
     hashed_password = get_password_hash(default_password)
-    
+    admin_email = os.getenv("SANDY_ADMIN_EMAIL", "dev.malhotra@example.com").strip().lower()
+
     print(f"Seeding credentials for {len(employees)} employees with default password: {default_password}")
-    
+
     try:
         if db.query(Employee).count() == 0:
             seed_database(db)
 
         for emp in employees:
+            normalized_email = emp["email"].strip().lower()
             existing_user = db.query(UserCredential).filter(UserCredential.employee_id == emp["id"]).first()
             if not existing_user:
                 new_user = UserCredential(
                     employee_id=emp["id"],
-                    email=emp["email"],
-                    hashed_password=hashed_password
+                    email=normalized_email,
+                    hashed_password=hashed_password,
+                    is_admin=(normalized_email == admin_email),
                 )
                 db.add(new_user)
-        
+            elif normalized_email == admin_email and not existing_user.is_admin:
+                existing_user.is_admin = True
+
         db.commit()
         print("Successfully seeded all credentials!")
+        print(f"Admin account: {admin_email}")
     except Exception as e:
         db.rollback()
         print(f"Error seeding credentials: {e}")

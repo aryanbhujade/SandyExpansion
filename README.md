@@ -171,3 +171,18 @@ This keeps only the seeded employees, employee profiles, responsibility topics, 
 - **Offline Fallback:** If Ollama is not running, the backend falls back to standard keyword-matching logic to parse searches and find contacts.
 - **Vite Environment:** Change API endpoints in `frontend/.env` if running the backend on a different port or host.
 - **Database Design:** See [`DATABASE.md`](DATABASE.md) for schema relationships, data flows, and confidentiality rules.
+
+### 🔐 Authentication & Admin (Phase 3)
+
+The backend reads these environment variables (all optional with defaults, included in `backend/.env.example`):
+
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `SANDY_ENV` | `development` | Set to `production` to require `SANDY_JWT_SECRET`. |
+| `SANDY_JWT_SECRET` | (ephemeral in dev) | JWT signing secret. **Required** when `SANDY_ENV=production`. |
+| `SANDY_ACCESS_TOKEN_MINUTES` | `10080` (7 days) | Access token lifetime. |
+| `SANDY_ADMIN_EMAIL` | `dev.malhotra@example.com` | Credential promoted to admin on startup. |
+
+An **admin is a normal user with an `is_admin` flag** — there is no separate admin account system. On startup the backend promotes the credential matching `SANDY_ADMIN_EMAIL` (the seeded CTO, `dev.malhotra@example.com` / `Password123!`). Admins see an **Analytics & Admin** button in the chat header (and a landing-page CTA) that opens the admin analytics dashboard at `/analytics`. Non-admin users get `403` from the `/api/analytics/*` endpoints and are redirected away from `/analytics` on the frontend. Logging out revokes the current token (jti-based).
+
+To use the admin features after pulling: **restart the backend** (so the startup migration + admin promotion run) and **log in fresh** as `dev.malhotra@example.com` (the admin claim is embedded in the JWT at login time).

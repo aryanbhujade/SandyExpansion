@@ -189,3 +189,75 @@ export interface ActiveConversation {
   sender_id: string;
   read: boolean;
 }
+
+// ---------- Analytics (admin) ----------
+
+export interface AnalyticsSummary {
+  totals: {
+    employees: number;
+    active_users: number;
+    chat_messages: number;
+    recommendations: number;
+    confirmed_recommendations: number;
+    fulfilled_requests: number;
+    feedback: number;
+    direct_messages: number;
+    notifications: number;
+    unread_notifications: number;
+  };
+  feedback: {
+    average_rating: number;
+    useful_percentage: number;
+  };
+  top_topics: { topic: string; count: number }[];
+  recommendations_by_department: { department: string; count: number }[];
+}
+
+export interface Paginated<T> {
+  page: number;
+  limit: number;
+  total: number;
+  items: T[];
+}
+
+export interface AnalyticsRecommendation {
+  id: number;
+  created_at: string;
+  rank: number;
+  score: number;
+  type: string;
+  reason: string | null;
+  requester: { employee_id: string | null; name: string | null };
+  recommended: {
+    employee_id: string;
+    name: string | null;
+    department: string | null;
+    level: string | null;
+  };
+  topic: string | null;
+  contact_request: { status: string; id: number } | null;
+  feedback: { was_useful: boolean | null; rating: number | null; id: number } | null;
+}
+
+export interface AnalyticsFeedback {
+  id: number;
+  created_at: string;
+  was_useful: boolean | null;
+  rating: number | null;
+  correct_employee_name: string | null;
+  feedback_text: string | null;
+  topic: string | null;
+  recommended: { employee_id: string; name: string | null } | null;
+}
+
+export interface AnalyticsChatMessage {
+  id: number;
+  created_at: string;
+  session_id: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  user_department: string | null;
+  message: string;
+  detected_topic: string | null;
+  recommendation_count: number;
+}

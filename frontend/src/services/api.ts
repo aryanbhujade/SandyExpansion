@@ -16,6 +16,11 @@ import type {
   ActiveConversation,
   FeedbackRequest,
   FeedbackResponse,
+  AnalyticsSummary,
+  AnalyticsRecommendation,
+  AnalyticsFeedback,
+  AnalyticsChatMessage,
+  Paginated,
 } from '@/types';
 
 // ---------- Axios Instance ----------
@@ -48,10 +53,14 @@ export const authApi = {
     const { data } = await apiClient.post('/api/auth/login', { email, password });
     return data;
   },
-  
+
   async getMe() {
     const { data } = await apiClient.get('/api/auth/me');
     return data;
+  },
+
+  async logout() {
+    await apiClient.post('/api/auth/logout');
   }
 };
 
@@ -196,6 +205,44 @@ export const messageApi = {
     const { data } = await apiClient.get<Record<string, number>>('/api/messages/unread/count');
     return data;
   }
+};
+
+// ---------- Analytics API (admin only) ----------
+
+export const analyticsApi = {
+  async getSummary(): Promise<AnalyticsSummary> {
+    const { data } = await apiClient.get<AnalyticsSummary>('/api/analytics/summary');
+    return data;
+  },
+
+  async getRecommendations(page = 1, limit = 20): Promise<Paginated<AnalyticsRecommendation>> {
+    const { data } = await apiClient.get<Paginated<AnalyticsRecommendation>>('/api/analytics/recommendations', {
+      params: { page, limit },
+    });
+    return data;
+  },
+
+  async getFeedback(page = 1, limit = 20): Promise<Paginated<AnalyticsFeedback>> {
+    const { data } = await apiClient.get<Paginated<AnalyticsFeedback>>('/api/analytics/feedback', {
+      params: { page, limit },
+    });
+    return data;
+  },
+
+  async getChatMessages(page = 1, limit = 20): Promise<Paginated<AnalyticsChatMessage>> {
+    const { data } = await apiClient.get<Paginated<AnalyticsChatMessage>>('/api/analytics/chat-messages', {
+      params: { page, limit },
+    });
+    return data;
+  },
+
+  async deleteChatMessage(id: number): Promise<void> {
+    await apiClient.delete(`/api/analytics/chat-messages/${id}`);
+  },
+
+  async deleteFeedback(id: number): Promise<void> {
+    await apiClient.delete(`/api/analytics/feedback/${id}`);
+  },
 };
 
 export default apiClient;

@@ -49,6 +49,10 @@ class UserCredential(Base):
     employee_id = Column(String, ForeignKey("employees.id"), primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    # Authorization flag — kept separate from Employee.role (which is the job title).
+    # Admins log in through the same /api/auth/login flow as everyone else; this flag
+    # gates admin-only endpoints via the require_admin_dep dependency.
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
 
 
 class EmployeeProfile(Base):
@@ -222,6 +226,7 @@ def _ensure_local_schema_updates() -> None:
     _ensure_sqlite_column("contact_requests", "requester_employee_id", "VARCHAR")
     _ensure_sqlite_column("contact_requests", "direct_message_id", "INTEGER")
     _ensure_sqlite_column("outgoing_notifications", "read_at", "DATETIME")
+    _ensure_sqlite_column("credentials", "is_admin", "BOOLEAN DEFAULT 0")
     _ensure_sqlite_index("ix_chat_messages_user_session_created", "chat_messages", "user_id, session_id, created_at")
     _ensure_sqlite_index("ix_recommendations_chat_rank", "recommendations", "chat_message_id, rank")
     _ensure_sqlite_index("ix_contact_requests_recommended_status", "contact_requests", "recommended_employee_id, status")

@@ -40,8 +40,10 @@ const EmployeeNode = ({ employee, depth = 0 }: { employee: Employee, depth?: num
     <div className="relative">
       <motion.div
         initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4, delay: depth * 0.1 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true, margin: "-40px 0px -40px 0px" }}
+        transition={{ duration: 0.4, delay: depth * 0.08, ease: [0.25, 1, 0.5, 1] }}
+        whileHover={{ y: -2 }}
         className="mb-4 relative z-10"
       >
         <Card className="bg-[#111112]/90 border-white/10 backdrop-blur-md rounded-[20px] p-4 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.8)] w-full max-w-sm hover:border-emerald-500/30 transition-colors">
@@ -80,11 +82,17 @@ const EmployeeNode = ({ employee, depth = 0 }: { employee: Employee, depth?: num
       {reports.length > 0 && (
         <div className="ml-8 md:ml-12 border-l border-emerald-500/10 pl-6 md:pl-10 relative mt-2">
           {/* Decorative horizontal lines linking to children */}
-          <div className="absolute top-0 bottom-6 left-0 w-px bg-gradient-to-b from-emerald-500/20 to-transparent pointer-events-none" />
-          
+          <div
+            className="absolute top-0 bottom-6 left-0 w-px bg-gradient-to-b from-emerald-500/20 to-transparent pointer-events-none"
+            style={{ transformOrigin: "top", animation: "draw-line-v 0.5s var(--ease-out-quart) both", animationDelay: `${depth * 0.08}s` }}
+          />
+
           {reports.map((report) => (
             <div key={report.id} className="relative">
-              <div className="absolute -left-6 md:-left-10 top-8 w-6 md:w-10 h-px bg-emerald-500/20 pointer-events-none" />
+              <div
+                className="absolute -left-6 md:-left-10 top-8 w-6 md:w-10 h-px bg-emerald-500/20 pointer-events-none"
+                style={{ transformOrigin: "left", animation: "draw-line-h 0.4s var(--ease-out-quart) both", animationDelay: `${(depth + 1) * 0.08}s` }}
+              />
               <EmployeeNode employee={report} depth={depth + 1} />
             </div>
           ))}
@@ -102,7 +110,7 @@ export default function HierarchyPage() {
   return (
     <div className="min-h-screen bg-[#0b0b0c] font-sans relative overflow-x-hidden">
       {/* Background Glows */}
-      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] rounded-full bg-emerald-500/[0.03] blur-[150px] pointer-events-none fixed" />
+      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] rounded-full bg-emerald-500/[0.03] blur-[150px] pointer-events-none fixed animate-glow-drift" />
       <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent fixed" />
 
       {/* Header */}

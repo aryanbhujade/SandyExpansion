@@ -11,6 +11,7 @@ import { BotMessageSquare, Users, Building, GraduationCap, Network, Sparkles, Ar
 import { useNavigate } from "react-router-dom"
 import { motion, type Variants } from "framer-motion"
 import { useAuth } from "@/context/AuthContext"
+import { CountUp } from "@/components/ui/counter"
 
 export default function LandingPage() {
   const navigate = useNavigate()
@@ -30,10 +31,10 @@ export default function LandingPage() {
   }
 
   const trustMetrics = [
-    { icon: <Users className="w-5 h-5" />, value: "450", label: "Employees" },
-    { icon: <Building className="w-5 h-5" />, value: "17", label: "Departments" },
-    { icon: <GraduationCap className="w-5 h-5" />, value: "200+", label: "Skills" },
-    { icon: <Network className="w-5 h-5" />, value: "18", label: "Org Levels" },
+    { icon: <Users className="w-5 h-5" />, value: 450, suffix: "", label: "Employees" },
+    { icon: <Building className="w-5 h-5" />, value: 17, suffix: "", label: "Departments" },
+    { icon: <GraduationCap className="w-5 h-5" />, value: 200, suffix: "+", label: "Skills" },
+    { icon: <Network className="w-5 h-5" />, value: 18, suffix: "", label: "Org Levels" },
   ]
 
   const features = [
@@ -49,7 +50,7 @@ export default function LandingPage() {
       <Card className="w-full h-screen rounded-none border-none bg-black relative overflow-x-hidden flex flex-col md:flex-row">
 
         {/* Subtle emerald radial glow behind left content */}
-        <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.04] blur-[120px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.04] blur-[120px] pointer-events-none animate-glow-drift" />
         <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
 
         {/* Static Background Spotlight */}
@@ -163,7 +164,7 @@ export default function LandingPage() {
                       <div className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 group-hover:bg-emerald-950/60 transition-colors">
                         {metric.icon}
                       </div>
-                      <span className="text-2xl font-bold text-white">{metric.value}</span>
+                      <CountUp value={metric.value} suffix={metric.suffix} className="text-2xl font-bold text-white" />
                     </div>
                     <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold group-hover:text-zinc-400 transition-colors">
                       {metric.label}

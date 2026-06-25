@@ -37,7 +37,7 @@ export default function SignInPage() {
   return (
     <div className="w-full min-h-screen bg-black font-sans flex items-center justify-center relative overflow-x-hidden py-24">
       {/* Background Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.05] blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.05] blur-[120px] pointer-events-none animate-glow-drift" />
       <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
 
       {/* Back Button */}

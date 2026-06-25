@@ -1,0 +1,5 @@
+[tool.pyrefly]
+# Point Pyrefly at the project venv so it resolves installed deps (ollama, etc.)
+# instead of falling back to the Homebrew system python3.
+python-interpreter-path = ".venv/bin/python"
+python-version = "3.14"

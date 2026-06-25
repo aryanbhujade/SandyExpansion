@@ -846,3 +846,169 @@ To try the new admin/analytics features after pulling:
 
 - Untracked the previously-committed `.DS_Store` (already covered by `.gitignore` going forward).
 - Reverted an accidental trailing-newline change in `frontend/tsconfig.app.json`.
+
+---
+
+## Phase 4 — Cloud LLM (Ollama Cloud via the `ollama` Python SDK)
+
+Date: 2026-06-25
+
+### Scope
+
+Replaces the local Ollama integration (Mistral over raw HTTP via `requests`) with
+**Ollama Cloud** using the official `ollama` Python SDK and a cloud-routed model
+(`glm-5.2:cloud`). The backend no longer requires a locally running Ollama daemon
+to answer chat requests — it calls Ollama Cloud, authenticated by
+`OLLAMA_API_KEY`. This is the change set staged on the `mk-2-cloud-llm` branch.
+
+### What changed and why
+
+- **Local Ollama → Ollama Cloud.** The previous implementation hit
+  `POST http://localhost:11434/api/generate` with `requests` and required
+  `ollama serve` + `ollama pull mistral` running on the machine. The new
+  implementation uses the `ollama` SDK's `Client.chat(...)`, which routes
+  `:cloud`-suffixed models to Ollama Cloud automatically when `OLLAMA_API_KEY`
+  is set. No local model download or daemon is needed.
+- **Auth handled by the SDK.** The `ollama` SDK reads `OLLAMA_API_KEY` from the
+  environment and injects it as a `Bearer` header, so the code only passes
+  `host` to the client (and only when `OLLAMA_BASE_URL` is set).
+- **Secrets stay local.** `OLLAMA_API_KEY` lives only in the gitignored
+  `backend/.env`. The tracked `backend/.env.example` keeps `OLLAMA_API_KEY=`
+  empty.
+
+### Backend — Modified Files
+
+#### `backend/app/services/local_llm.py`
+
+Rewritten to use the `ollama` SDK:
+
+- `import ollama` replaces `import requests`.
+- New `_build_client()` returns an `ollama.Client`, passing `host` only when
+  `OLLAMA_BASE_URL` is set.
+- `get_llm_settings()` now returns `dict[str, str | None]` with `model`, `host`
+  (from `OLLAMA_BASE_URL`, optional), and `api_key` (from `OLLAMA_API_KEY`,
+  optional). Default `OLLAMA_MODEL` is now `glm-5.2:cloud`.
+- `generate_text()` now:
+  - builds messages as a chat transcript (`system` + `user` roles) instead of a
+    single `prompt` + `system` payload,
+  - guards against an unset model with `LocalLLMError("OLLAMA_MODEL is not
+    configured.")` (also narrows the type so the SDK overload matches),
+  - calls `client.chat(model=..., messages=...)`,
+  - parses `response["message"]["content"]` and strips it.
+- Error handling wraps the SDK's generic `Exception` into `LocalLLMError`.
+
+Callers are unchanged: `answer_generator.py` and `request_analyser.py` still call
+`generate_text(prompt, system_prompt=...)`; `main.py` still imports
+`get_llm_settings`. Both callers catch `LocalLLMError` and fall back to the
+keyword/heuristic path (`_fallback_answer` / `_fallback_topic`), so a missing or
+invalid key degrades gracefully instead of 500-ing every chat request.
+
+#### `backend/requirements.txt`
+
+- Added `ollama` (the official Ollama Python SDK). `requests` is no longer used
+  by the LLM path but remains a dependency.
+
+#### `backend/.env.example` / `backend/.env`
+
+```env
+# LLM endpoint (Ollama Cloud via the `ollama` Python SDK)
+OLLAMA_BASE_URL=
+OLLAMA_MODEL=glm-5.2:cloud
+OLLAMA_API_KEY=
+```
+
+- `OLLAMA_MODEL` default changed from `mistral` → `glm-5.2:cloud`.
+- `OLLAMA_API_KEY` added (empty in the tracked template; real value only in the
+  gitignored `backend/.env`).
+- `OLLAMA_BASE_URL` left blank — the SDK auto-routes `:cloud` models to Ollama
+  Cloud. Set it only when targeting a non-default host.
+
+### Running the cloud LLM version
+
+Prerequisites change: **Ollama no longer needs to be installed or running
+locally.** You only need a valid Ollama Cloud API key.
+
+1. Install backend deps (now includes `ollama`):
+
+   ```bash
+   cd backend
+   .venv/bin/pip install -r requirements.txt
+   ```
+
+2. Configure `backend/.env` (copy the template, then fill in your key):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Set at minimum:
+
+   ```env
+   OLLAMA_MODEL=glm-5.2:cloud
+   OLLAMA_API_KEY=<your Ollama Cloud API key>
+   ```
+
+   Leave `OLLAMA_BASE_URL` blank for Ollama Cloud.
+
+3. Seed the DB (first run only) and start the backend:
+
+   ```bash
+   cd backend
+   .venv/bin/python -m app.services.seed_data
+   .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+   ```
+
+   If port 8000 is taken, find and stop the listener:
+
+   ```bash
+   lsof -nP -iTCP:8000 -sTCP:LISTEN
+   kill <PID>
+   ```
+
+4. Start the frontend (unchanged from previous phases):
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+   Open `http://localhost:5173`.
+
+5. Verify the chat path is hitting Ollama Cloud:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/chat \
+     -H "Content-Type: application/json" \
+     -d '{
+       "message": "Who works best for AWS?",
+       "requester_id": "EMP0001",
+       "session_id": "cloud-test"
+     }'
+   ```
+
+   A real response (not the keyword fallback) confirms the cloud model is wired
+   up. If `OLLAMA_API_KEY` is missing or invalid the backend raises
+   `LocalLLMError("Ollama chat request failed: ...")`; check `backend/.env`.
+
+### Files Added (Phase 4)
+
+- `backend/pyproject.toml` — Pyrefly config pointing the type-checker at the
+  project venv (`python-interpreter-path = ".venv/bin/python"`) so installed
+  deps like `ollama` resolve. Tooling-only; no runtime effect.
+
+### Files Modified (Phase 4)
+
+- `backend/app/services/local_llm.py`
+- `backend/requirements.txt`
+- `backend/.env.example`
+- `backend/.env` (local only, gitignored)
+
+### Notes
+
+- The keyword/heuristic fallback in `answer_generator.py` and
+  `request_analyser.py` still applies if the LLM call raises `LocalLLMError`,
+  so a missing/invalid key degrades gracefully rather than 500-ing every chat
+  request.
+- `OLLAMA_API_KEY` is covered by `.gitignore` (`backend/.env` / `backend/.env.*`
+  with the `!backend/.env.example` exception); the real key is never committed.

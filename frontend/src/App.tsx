@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ChatProvider } from "@/context/ChatContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import { MotionConfig } from "framer-motion"
 import LandingPage from "./pages/LandingPage"
 import ChatPage from "./pages/ChatPage"
 import SignInPage from "./pages/SignInPage"
@@ -25,36 +26,38 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <TooltipProvider>
-      <AuthProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/signin" element={<SignInPage />} />
-            <Route path="/signup" element={<Navigate to="/signin" replace />} />
-            <Route path="/hierarchy" element={<HierarchyPage />} />
-            <Route
-              path="/chat"
-              element={
-                <ProtectedRoute>
-                  <ChatProvider>
-                    <ChatPage />
-                  </ChatProvider>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <AdminRoute>
-                  <AnalyticsPage />
-                </AdminRoute>
-              }
-            />
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </TooltipProvider>
+    <MotionConfig reducedMotion="user">
+      <TooltipProvider>
+        <AuthProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/signin" element={<SignInPage />} />
+              <Route path="/signup" element={<Navigate to="/signin" replace />} />
+              <Route path="/hierarchy" element={<HierarchyPage />} />
+              <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute>
+                    <ChatProvider>
+                      <ChatPage />
+                    </ChatProvider>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <AdminRoute>
+                    <AnalyticsPage />
+                  </AdminRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </TooltipProvider>
+    </MotionConfig>
   )
 }
 

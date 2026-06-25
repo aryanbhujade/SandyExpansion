@@ -185,9 +185,14 @@ export default function ProfileModal({ isOpen, onClose, employeeId, onProfileUpd
                   )}
 
                   {success && (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-sm text-emerald-300">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: -6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                      className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-sm text-emerald-300"
+                    >
                       Profile saved successfully! Closing...
-                    </div>
+                    </motion.div>
                   )}
 
                   {/* Form fields */}

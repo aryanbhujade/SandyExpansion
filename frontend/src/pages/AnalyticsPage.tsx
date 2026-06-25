@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   ArrowLeft,
   BarChart3,
@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { analyticsApi } from "@/services/api"
 import { useAuth } from "@/context/AuthContext"
+import { CountUp } from "@/components/ui/counter"
 import type {
   AnalyticsSummary,
   AnalyticsRecommendation,
@@ -70,10 +71,19 @@ export default function AnalyticsPage() {
 
   const loadRecs = useCallback(async (page: number) => {
     try {
-      const data = await analyticsApi.getRecommendations(page, PAGE_SIZE)
+      let data = await analyticsApi.getRecommendations(page, PAGE_SIZE)
+      // If the requested page is now beyond the last page (e.g. after a
+      // delete removed the final row on this page), step back to the last page
+      // so the user is never stranded on an empty page with no navigation.
+      const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+      if (page > lastPage) {
+        data = await analyticsApi.getRecommendations(lastPage, PAGE_SIZE)
+        setRecsPage(lastPage)
+      } else {
+        setRecsPage(page)
+      }
       setRecs(data.items)
       setRecsTotal(data.total)
-      setRecsPage(page)
     } catch {
       setError("Failed to load recommendations.")
     }
@@ -81,10 +91,16 @@ export default function AnalyticsPage() {
 
   const loadFeedback = useCallback(async (page: number) => {
     try {
-      const data = await analyticsApi.getFeedback(page, PAGE_SIZE)
+      let data = await analyticsApi.getFeedback(page, PAGE_SIZE)
+      const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+      if (page > lastPage) {
+        data = await analyticsApi.getFeedback(lastPage, PAGE_SIZE)
+        setFeedbackPage(lastPage)
+      } else {
+        setFeedbackPage(page)
+      }
       setFeedback(data.items)
       setFeedbackTotal(data.total)
-      setFeedbackPage(page)
     } catch {
       setError("Failed to load feedback.")
     }
@@ -92,10 +108,16 @@ export default function AnalyticsPage() {
 
   const loadMessages = useCallback(async (page: number) => {
     try {
-      const data = await analyticsApi.getChatMessages(page, PAGE_SIZE)
+      let data = await analyticsApi.getChatMessages(page, PAGE_SIZE)
+      const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+      if (page > lastPage) {
+        data = await analyticsApi.getChatMessages(lastPage, PAGE_SIZE)
+        setMessagesPage(lastPage)
+      } else {
+        setMessagesPage(page)
+      }
       setMessages(data.items)
       setMessagesTotal(data.total)
-      setMessagesPage(page)
     } catch {
       setError("Failed to load chat messages.")
     }
@@ -152,7 +174,7 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-[#0b0b0c] font-sans relative overflow-x-hidden">
       {/* Background Glows */}
-      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] rounded-full bg-emerald-500/[0.03] blur-[150px] pointer-events-none fixed" />
+      <div className="absolute top-0 right-1/4 w-[800px] h-[800px] rounded-full bg-emerald-500/[0.03] blur-[150px] pointer-events-none fixed animate-glow-drift" />
       <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent fixed" />
 
       {/* Header */}
@@ -213,7 +235,7 @@ export default function AnalyticsPage() {
                       <div className="p-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/20">{m.icon}</div>
                       <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">{m.label}</span>
                     </div>
-                    <div className="text-2xl font-bold text-white">{m.value}</div>
+                    <div className="text-2xl font-bold text-white"><CountUp value={m.value} /></div>
                   </Card>
                 </motion.div>
               ))}
@@ -272,26 +294,38 @@ export default function AnalyticsPage() {
             <div className="p-12 flex items-center justify-center text-zinc-500">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
             </div>
-          ) : tab === "recommendations" ? (
-            <RecommendationsTable rows={recs} page={recsPage} total={recsTotal} onPage={loadRecs} />
-          ) : tab === "feedback" ? (
-            <FeedbackTable
-              rows={feedback}
-              page={feedbackPage}
-              total={feedbackTotal}
-              onPage={loadFeedback}
-              onDelete={handleDeleteFeedback}
-              busyId={busyId}
-            />
           ) : (
-            <ChatTable
-              rows={messages}
-              page={messagesPage}
-              total={messagesTotal}
-              onPage={loadMessages}
-              onDelete={handleDeleteMessage}
-              busyId={busyId}
-            />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={tab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+              >
+                {tab === "recommendations" ? (
+                  <RecommendationsTable rows={recs} page={recsPage} total={recsTotal} onPage={loadRecs} />
+                ) : tab === "feedback" ? (
+                  <FeedbackTable
+                    rows={feedback}
+                    page={feedbackPage}
+                    total={feedbackTotal}
+                    onPage={loadFeedback}
+                    onDelete={handleDeleteFeedback}
+                    busyId={busyId}
+                  />
+                ) : (
+                  <ChatTable
+                    rows={messages}
+                    page={messagesPage}
+                    total={messagesTotal}
+                    onPage={loadMessages}
+                    onDelete={handleDeleteMessage}
+                    busyId={busyId}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
           )}
         </Card>
       </main>
@@ -308,10 +342,22 @@ function Pagination({ page, total, onPage }: { page: number; total: number; onPa
     <div className="flex items-center justify-between px-5 py-3 border-t border-white/5">
       <span className="text-xs text-zinc-500">Page {page} of {pages} · {total} total</span>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/10 hover:text-white"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
           <ChevronLeft className="w-3.5 h-3.5" /> Prev
         </Button>
-        <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/10 hover:text-white"
+          disabled={page >= pages}
+          onClick={() => onPage(page + 1)}
+        >
           Next <ChevronRight className="w-3.5 h-3.5" />
         </Button>
       </div>
@@ -338,6 +384,7 @@ function RecommendationsTable({
   onPage: (p: number) => void
 }) {
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -375,8 +422,9 @@ function RecommendationsTable({
           ))}
         </tbody>
       </table>
-      <Pagination page={page} total={total} onPage={onPage} />
     </div>
+    <Pagination page={page} total={total} onPage={onPage} />
+    </>
   )
 }
 
@@ -393,6 +441,7 @@ function FeedbackTable({
   busyId: number | null
 }) {
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -423,6 +472,7 @@ function FeedbackTable({
                 <Button
                   variant="destructive"
                   size="xs"
+                  className="border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20"
                   disabled={busyId === f.id}
                   onClick={() => onDelete(f.id)}
                 >
@@ -433,8 +483,9 @@ function FeedbackTable({
           ))}
         </tbody>
       </table>
-      <Pagination page={page} total={total} onPage={onPage} />
     </div>
+    <Pagination page={page} total={total} onPage={onPage} />
+    </>
   )
 }
 
@@ -451,6 +502,7 @@ function ChatTable({
   busyId: number | null
 }) {
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -480,6 +532,7 @@ function ChatTable({
                 <Button
                   variant="destructive"
                   size="xs"
+                  className="border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20"
                   disabled={busyId === m.id}
                   onClick={() => onDelete(m.id)}
                 >
@@ -490,8 +543,9 @@ function ChatTable({
           ))}
         </tbody>
       </table>
-      <Pagination page={page} total={total} onPage={onPage} />
     </div>
+    <Pagination page={page} total={total} onPage={onPage} />
+    </>
   )
 }
 

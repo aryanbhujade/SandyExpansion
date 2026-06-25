@@ -130,7 +130,7 @@ function RecommendationCard({
   };
 
   return (
-    <div className="rounded-3xl border border-white/8 bg-[#1d1d1d] p-4 text-sm text-zinc-300 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.8)]">
+    <div className={`rounded-3xl border border-white/8 bg-[#1d1d1d] p-4 text-sm text-zinc-300 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.8)] ${notificationStatus === 'sent' ? 'animate-incoming-flash' : ''}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-base font-semibold text-white">{recommendation.name}</p>
@@ -429,6 +429,9 @@ export default function ChatPage() {
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
 
   const unreadNotificationCount = notifications.filter((n) => !n.read_at).length;
+  const [bellNudge, setBellNudge] = useState(false);
+  const prevUnreadRef = useRef(0);
+  const didInitBellRef = useRef(false);
 
   // Profile modal and Live chat states
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -436,6 +439,10 @@ export default function ChatPage() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [toasts, setToasts] = useState<{ id: string; senderId: string; senderName: string; message: string; timestamp: Date }[]>([]);
   const prevConversationsRef = useRef<Record<string, ActiveConversation>>({});
+
+  // Track freshly-arrived incoming DM messages so they flash once on entry.
+  const knownDmIds = useRef<Set<string | number>>(new Set());
+  const [flashDmIds, setFlashDmIds] = useState<Set<string | number>>(new Set());
 
   const isNearBottom = useCallback(() => {
     const viewport = messageViewportRef.current;
@@ -550,6 +557,22 @@ export default function ChatPage() {
     };
   }, []);
 
+  // Nudge the bell when the unread count rises.
+  useEffect(() => {
+    if (!didInitBellRef.current) {
+      didInitBellRef.current = true;
+      prevUnreadRef.current = unreadNotificationCount;
+      return;
+    }
+    if (unreadNotificationCount > prevUnreadRef.current) {
+      setBellNudge(true);
+      const t = setTimeout(() => setBellNudge(false), 750);
+      prevUnreadRef.current = unreadNotificationCount;
+      return () => clearTimeout(t);
+    }
+    prevUnreadRef.current = unreadNotificationCount;
+  }, [unreadNotificationCount]);
+
   // DM polling: fetch new messages every 5 seconds when in a DM conversation
   useEffect(() => {
     if (activeChat === 'bot') return;
@@ -578,6 +601,34 @@ export default function ChatPage() {
     const interval = setInterval(pollMessages, 5000);
     return () => clearInterval(interval);
   }, [activeChat]);
+
+  // Flash freshly-arrived incoming DM bubbles once.
+  useEffect(() => {
+    if (directMessages.length === 0) {
+      knownDmIds.current = new Set();
+      return;
+    }
+    const newFlash = new Set<string | number>();
+    directMessages.forEach((m) => {
+      if (!knownDmIds.current.has(m.id)) {
+        if (knownDmIds.current.size > 0 && m.sender_id !== user?.employee_id) {
+          newFlash.add(m.id);
+        }
+        knownDmIds.current.add(m.id);
+      }
+    });
+    if (newFlash.size > 0) {
+      setFlashDmIds((prev) => new Set([...prev, ...newFlash]));
+      const t = setTimeout(() => {
+        setFlashDmIds((prev) => {
+          const next = new Set(prev);
+          newFlash.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 1300);
+      return () => clearTimeout(t);
+    }
+  }, [directMessages, user]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -819,9 +870,11 @@ export default function ChatPage() {
                   const conv = activeConversations[emp.employee_id];
                   const unreadCount = unreadCounts[emp.employee_id] || 0;
                   return (
-                    <div
+                    <motion.div
+                      layout
                       key={emp.employee_id}
                       onClick={() => setActiveChat(emp.employee_id)}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                       className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
                         activeChat === emp.employee_id
                           ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
@@ -855,7 +908,7 @@ export default function ChatPage() {
                           </span>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -992,7 +1045,9 @@ export default function ChatPage() {
                   onClick={() => setNotificationPanelOpen(!notificationPanelOpen)}
                   title="Notifications"
                 >
-                  <Bell className="h-4 w-4" />
+                  <span className={`inline-flex ${bellNudge ? 'animate-bell-nudge' : ''}`}>
+                    <Bell className="h-4 w-4" />
+                  </span>
                   {unreadNotificationCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black">
                       {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
@@ -1069,7 +1124,7 @@ export default function ChatPage() {
                             key={message.id}
                             initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.28, ease: 'easeOut' }}
+                            transition={{ type: 'spring', stiffness: 280, damping: 26, mass: 0.7 }}
                             className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
                           >
                             <div className={`flex w-full gap-4 ${isUser ? 'max-w-2xl flex-row-reverse' : 'max-w-3xl'}`}>
@@ -1120,22 +1175,28 @@ export default function ChatPage() {
                                           : undefined;
 
                                       return (
-                                        <RecommendationCard
+                                        <motion.div
                                           key={`${message.id}-${recommendation.employee_id}-${index}`}
-                                          recommendation={recommendation}
-                                          canNotify={recommendationId !== undefined}
-                                          notificationState={notificationState}
-                                          onNotify={() => {
-                                            if (recommendationId !== undefined) {
-                                              confirmRecommendation(message.id, recommendationId);
-                                            }
-                                          }}
-                                          onFeedbackSubmit={(feedback) => {
-                                            if (recommendationId !== undefined) {
-                                              submitRecommendationFeedback(message.id, recommendationId, feedback);
-                                            }
-                                          }}
-                                        />
+                                          initial={{ opacity: 0, y: 14 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          transition={{ duration: 0.4, delay: index * 0.08, ease: [0.25, 1, 0.5, 1] }}
+                                        >
+                                          <RecommendationCard
+                                            recommendation={recommendation}
+                                            canNotify={recommendationId !== undefined}
+                                            notificationState={notificationState}
+                                            onNotify={() => {
+                                              if (recommendationId !== undefined) {
+                                                confirmRecommendation(message.id, recommendationId);
+                                              }
+                                            }}
+                                            onFeedbackSubmit={(feedback) => {
+                                              if (recommendationId !== undefined) {
+                                                submitRecommendationFeedback(message.id, recommendationId, feedback);
+                                              }
+                                            }}
+                                          />
+                                        </motion.div>
                                       );
                                     })}
                                   </div>
@@ -1198,7 +1259,7 @@ export default function ChatPage() {
                                       isUser
                                         ? 'border-violet-400/15 bg-[linear-gradient(145deg,rgba(99,102,241,0.22),rgba(35,35,38,0.95))] text-zinc-100'
                                         : 'border-white/8 bg-[#1b1b1d] text-zinc-300'
-                                    }`}
+                                    } ${flashDmIds.has(msg.id) ? 'animate-incoming-flash' : ''}`}
                                   >
                                     <div className="whitespace-pre-wrap text-[15px] leading-7">
                                       {msg.message}
@@ -1227,15 +1288,9 @@ export default function ChatPage() {
                         </Avatar>
                         <div className="rounded-[28px] border border-white/8 bg-[#1b1b1d] px-5 py-4 shadow-[0_24px_70px_-42px_rgba(0,0,0,0.85)]">
                           <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/60 animate-bounce" />
-                            <span
-                              className="h-2.5 w-2.5 rounded-full bg-emerald-300/60 animate-bounce"
-                              style={{ animationDelay: '120ms' }}
-                            />
-                            <span
-                              className="h-2.5 w-2.5 rounded-full bg-emerald-300/60 animate-bounce"
-                              style={{ animationDelay: '240ms' }}
-                            />
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/70" style={{ animation: 'typing-shimmer 1.2s var(--ease-in-out-quart) infinite' }} />
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/70" style={{ animation: 'typing-shimmer 1.2s var(--ease-in-out-quart) infinite', animationDelay: '150ms' }} />
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300/70" style={{ animation: 'typing-shimmer 1.2s var(--ease-in-out-quart) infinite', animationDelay: '300ms' }} />
                           </div>
                         </div>
                       </div>
@@ -1268,7 +1323,7 @@ export default function ChatPage() {
                   )}
 
                   <div className="rounded-[30px] border border-white/8 bg-[#202022] p-2 shadow-[0_20px_70px_-45px_rgba(0,0,0,0.95)]">
-                    <div className="flex items-center gap-3 rounded-[24px] bg-[#111112] px-4 py-3">
+                    <div className="flex items-center gap-3 rounded-[24px] bg-[#111112] px-4 py-3 transition-shadow duration-300 focus-within:shadow-[0_0_0_1px_rgba(16,185,129,0.25),0_0_28px_-6px_rgba(16,185,129,0.4)]">
                       <div className="hidden rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-medium text-zinc-400 md:inline-flex">
                         {activeChat === 'bot' ? 'Ask anything' : 'Message'}
                       </div>
@@ -1287,7 +1342,14 @@ export default function ChatPage() {
                         size="icon"
                         className="h-11 w-11 rounded-2xl bg-white text-black hover:bg-zinc-200 disabled:opacity-40"
                       >
-                        <Send className="h-4 w-4" />
+                        <motion.span
+                          whileTap={{ scale: 0.8 }}
+                          animate={{ rotate: isSending ? -38 : 0, x: isSending ? 1 : 0 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+                          className="inline-flex"
+                        >
+                          <Send className="h-4 w-4" />
+                        </motion.span>
                       </Button>
                     </div>
                   </div>
@@ -1334,7 +1396,7 @@ export default function ChatPage() {
               initial={{ opacity: 0, y: 50, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
-              className="pointer-events-auto flex w-full flex-col rounded-2xl border border-emerald-500/25 bg-[#121213]/95 p-4 text-white shadow-2xl backdrop-blur-xl cursor-pointer hover:bg-zinc-900/90 transition-all duration-200"
+              className="pointer-events-auto relative overflow-hidden flex w-full flex-col rounded-2xl border border-emerald-500/25 bg-[#121213]/95 p-4 text-white shadow-2xl backdrop-blur-xl cursor-pointer hover:bg-zinc-900/90 transition-all duration-200"
               onClick={() => {
                 setActiveChat(toast.senderId);
                 setToasts(prev => prev.filter(t => t.id !== toast.id));
@@ -1357,6 +1419,7 @@ export default function ChatPage() {
               </div>
               <p className="mt-1.5 text-sm font-semibold">{toast.senderName}</p>
               <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{toast.message}</p>
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-400/50 animate-toast-deplete" />
             </motion.div>
           ))}
         </AnimatePresence>

@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sandy Connect — Stakeholder Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#ffffff; --bg2:#f6f7f9;
+    --line:rgba(15,18,23,.08); --line-em:rgba(16,185,129,.32);
+    --text:#15161a; --muted:#565a62; --dim:#8b909a;
+    --em:#059669; --em2:#10b981; --em-deep:#047857;
+    --violet:#6366f1; --sky:#0ea5e9; --amber:#d97706; --rose:#e11d48;
+    --radius:26px; --shadow:0 24px 70px -40px rgba(15,18,23,.28);
+    font-synthesis:none; text-rendering:optimizeLegibility;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Geist",system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow:hidden}
+  a{color:var(--em);text-decoration:none}
+  code,pre,.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  #bg-fx{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+  #bg-fx .blob{position:absolute;border-radius:50%;filter:blur(120px);opacity:.5}
+  #bg-fx .b1{width:58vw;height:58vw;left:-18vw;top:-22vw;background:radial-gradient(circle,rgba(16,185,129,.16),transparent 60%)}
+  #bg-fx .b2{width:52vw;height:52vw;right:-20vw;bottom:-24vw;background:radial-gradient(circle,rgba(99,102,241,.10),transparent 60%)}
+  #bg-fx .grid{position:absolute;inset:0;
+    background-image:linear-gradient(rgba(15,18,23,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(15,18,23,.04) 1px,transparent 1px);
+    background-size:48px 48px;mask-image:radial-gradient(ellipse at center,#000 25%,transparent 75%)}
+
+  #stage{position:fixed;inset:0;z-index:1}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    padding:clamp(30px,5.5vh,68px) clamp(30px,7vw,120px);
+    opacity:0;transform:translateY(14px) scale(.995);transition:opacity .5s ease,transform .5s cubic-bezier(.22,1,.36,1)}
+  .slide.active{display:flex;opacity:1;transform:none}
+
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:14px;
+    padding:14px 22px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  .brand{display:flex;align-items:center;gap:10px;color:var(--text);font-weight:600;letter-spacing:.02em;text-transform:none;font-size:13px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--em);box-shadow:0 0 12px rgba(16,185,129,.6)}
+  .spacer{flex:1}
+  .crumb{color:var(--muted)}
+  .crumb b{color:var(--text)}
+
+  .nav{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:center;gap:18px;
+    padding:16px 22px}
+  .nav button{appearance:none;background:rgba(15,18,23,.04);border:1px solid var(--line);color:var(--muted);
+    width:38px;height:38px;border-radius:12px;cursor:pointer;font-size:15px;transition:.2s}
+  .nav button:hover{color:var(--text);border-color:var(--line-em);background:rgba(16,185,129,.08)}
+  .dots{display:flex;gap:7px;align-items:center}
+  .dots i{width:7px;height:7px;border-radius:50%;background:rgba(15,18,23,.16);transition:.25s;cursor:pointer}
+  .dots i.on{background:var(--em);width:22px;border-radius:6px}
+  .counter{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;letter-spacing:.1em}
+  .counter b{color:var(--text)}
+  .fs{position:fixed;bottom:16px;right:22px;z-index:5;color:var(--dim);font-size:11px;letter-spacing:.1em}
+
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--em);font-weight:600;margin-bottom:14px}
+  h1.title{font-size:clamp(40px,5.6vw,78px);line-height:1.04;letter-spacing:-.03em;font-weight:700;margin:0;
+    background:linear-gradient(180deg,#0a0c10,#3a3d44 70%,#6b6f78);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2.section{font-size:clamp(26px,3.7vw,46px);line-height:1.06;letter-spacing:-.025em;font-weight:600;margin:0 0 6px;color:var(--text)}
+  h2.section .em{color:var(--em)}
+  .lede{font-size:clamp(14px,1.4vw,18px);line-height:1.55;color:var(--muted);max-width:64ch;margin-top:12px}
+
+  .row{display:flex;gap:18px;flex-wrap:wrap}
+  .grow{flex:1}
+  .mta{margin-top:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+
+  .card{padding:20px 22px;border-radius:20px;background:rgba(15,18,23,.022);border:1px solid var(--line)}
+  .card h3{margin:0 0 8px;font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--text)}
+  .card p{margin:0;font-size:13px;line-height:1.55;color:var(--muted)}
+  .card.accent{border-color:var(--line-em);background:linear-gradient(180deg,rgba(16,185,129,.08),rgba(16,185,129,.02))}
+  .card.accent h3{color:var(--em-deep)}
+
+  ul.clean{margin:0;padding-left:0;list-style:none}
+  ul.clean li{position:relative;padding-left:20px;font-size:13.5px;line-height:1.55;color:var(--muted);margin-bottom:8px}
+  ul.clean li::before{content:"";position:absolute;left:0;top:.55em;width:7px;height:7px;border-radius:50%;background:var(--em);opacity:.85}
+  ul.clean li b{color:var(--text);font-weight:600}
+  ul.clean.check li::before{content:"✓";background:none;color:var(--em);font-size:13px;font-weight:700;left:1px;top:.1em;width:auto;height:auto;border-radius:0}
+  ul.clean.open li::before{content:"○";background:none;color:var(--amber);font-size:15px;left:0;top:0;width:auto;height:auto;border-radius:0}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .chip{font-size:12px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(15,18,23,.03);color:var(--muted)}
+  .chip.em{border-color:var(--line-em);color:var(--em-deep);background:rgba(16,185,129,.07)}
+  .chip.v{border-color:rgba(99,102,241,.3);color:var(--violet);background:rgba(99,102,241,.06)}
+  .chip.sky{border-color:rgba(14,165,233,.3);color:var(--sky);background:rgba(14,165,233,.06)}
+
+  .flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+  .flow .node{flex:1;min-width:118px;padding:13px 12px;border-radius:15px;background:rgba(15,18,23,.025);border:1px solid var(--line);text-align:center}
+  .flow .node b{display:block;font-size:13px;color:var(--text);margin-bottom:4px}
+  .flow .node span{font-size:11px;color:var(--muted);line-height:1.4}
+  .flow .arr{display:flex;align-items:center;color:var(--dim);font-size:16px}
+  .flow .node.acc{border-color:var(--line-em);background:linear-gradient(180deg,rgba(16,185,129,.08),rgba(16,185,129,.02))}
+
+  .arch{display:grid;grid-template-columns:1.1fr auto 1fr;gap:14px;align-items:stretch}
+  .arch .box{padding:18px;border-radius:18px;border:1px solid var(--line);background:rgba(15,18,23,.02)}
+  .arch .box h3{margin:0 0 10px;font-size:13px;color:var(--em-deep);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+  .arch .mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--dim);font-size:11px}
+  .arch .mid .pill{padding:7px 11px;border-radius:11px;border:1px solid var(--line);background:rgba(15,18,23,.03);color:var(--muted);font-size:11.5px}
+
+  .mock{border:1px solid var(--line);border-radius:18px;background:rgba(15,18,23,.02);overflow:hidden}
+  .mock .top{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+  .mock .body{display:grid;grid-template-columns:160px 1fr;height:230px}
+  .mock .side{border-right:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .mock .conv{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:11px;font-size:11.5px;color:var(--muted)}
+  .mock .conv.on{background:rgba(16,185,129,.09);color:var(--text)}
+  .mock .conv .av{width:22px;height:22px;border-radius:50%;background:rgba(99,102,241,.18);color:var(--violet);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:600}
+  .mock .conv .badge{margin-left:auto;background:var(--em);color:#fff;font-size:10px;border-radius:999px;padding:1px 7px;font-weight:600}
+  .mock .thread{padding:12px 14px;display:flex;flex-direction:column;gap:10px;justify-content:flex-end}
+  .mock .b{max-width:70%;padding:8px 12px;border-radius:14px;font-size:12px;line-height:1.4}
+  .mock .b.in{background:rgba(15,18,23,.06);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+  .mock .b.out{background:linear-gradient(145deg,rgba(99,102,241,.22),rgba(220,222,235,.95));color:var(--text);align-self:flex-end;border-bottom-right-radius:4px}
+
+  .toast-mock{position:relative;border:1px solid var(--line);border-radius:18px;background:rgba(15,18,23,.02);padding:18px;height:230px;overflow:hidden}
+  .toast-mock .toast{position:absolute;right:16px;bottom:16px;width:230px;border:1px solid var(--line-em);background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 18px 50px -20px rgba(15,18,23,.35)}
+  .toast-mock .toast .h{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);font-weight:600}
+  .toast-mock .toast .h .d{width:8px;height:8px;border-radius:50%;background:var(--em)}
+  .toast-mock .toast .t{font-size:11.5px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+  .toast-mock .toast .btn{margin-top:9px;font-size:11px;color:var(--em-deep);font-weight:600}
+  .toast-mock .lbl{position:absolute;left:16px;top:14px;font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+
+  .profile-mock{border:1px solid var(--line);border-radius:18px;background:#fff;padding:18px;box-shadow:0 24px 60px -28px rgba(15,18,23,.3);max-width:340px}
+  .profile-mock .h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .profile-mock .h .av{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,rgba(16,185,129,.25),rgba(99,102,241,.2));color:var(--em-deep);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .profile-mock .h b{font-size:14px}
+  .profile-mock .h span{font-size:11px;color:var(--dim);display:block}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+  .field .val{font-size:12px;color:var(--text);padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:rgba(15,18,23,.02)}
+  .field .tags{display:flex;gap:6px;flex-wrap:wrap}
+  .field .tags span{font-size:10.5px;padding:3px 8px;border-radius:8px;border:1px solid var(--line-em);color:var(--em-deep);background:rgba(16,185,129,.06)}
+
+  .tree-mock{border:1px solid var(--line);border-radius:18px;background:rgba(15,18,23,.02);padding:22px;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .tnode{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .tcard{border:1px solid var(--line);border-radius:12px;background:#fff;padding:7px 12px;text-align:center;box-shadow:0 8px 24px -16px rgba(15,18,23,.3)}
+  .tcard b{font-size:12px;display:block}
+  .tcard span{font-size:10px;color:var(--dim)}
+  .tline{width:1px;height:16px;background:var(--line-em)}
+  .trow{display:flex;gap:34px}
+
+  .slide-foot{margin-top:auto;display:flex;gap:10px;align-items:center;color:var(--dim);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+  .slide-foot .ln{height:1px;flex:1;background:linear-gradient(90deg,var(--line-em),transparent)}
+
+  /* speaker notes drawer */
+  #notes{position:fixed;left:0;right:0;bottom:0;z-index:8;transform:translateY(100%);transition:transform .35s cubic-bezier(.22,1,.36,1);
+    background:rgba(8,10,13,.96);color:#e7e7e8;border-top:1px solid rgba(16,185,129,.25);
+    padding:20px clamp(30px,7vw,120px) 56px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  body.notes-on #notes{transform:none}
+  #notes .nl{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--em2);font-weight:600;margin-bottom:8px}
+  #notes .nt{font-size:15px;line-height:1.6;color:#c9cbd1;max-width:90ch;font-style:italic}
+
+  .shutter{display:inline-block;overflow:hidden}
+  .shutter span{display:inline-block;animation:shut .9s cubic-bezier(.22,1,.36,1) both}
+  @keyframes shut{from{transform:translateY(110%);opacity:0}to{transform:none;opacity:1}}
+  .pulse{animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+  @media (max-width:920px){.grid2,.grid3,.grid4{grid-template-columns:1fr}.arch{grid-template-columns:1fr}.flow .arr{display:none}.mock .body{grid-template-columns:120px 1fr}}
+</style>
+</head>
+<body>
+
+<div id="bg-fx">
+  <div class="grid"></div>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+</div>
+
+<div class="topbar">
+  <div class="brand"><span class="dot pulse"></span>Sandy Connect</div>
+  <div class="spacer"></div>
+  <div class="crumb">Stakeholder Presentation · <b>Implemented Features</b></div>
+</div>
+
+<div id="stage">
+
+<!-- 1 · Vision / Hub -->
+<section class="slide" data-notes="Hello everyone. Today I am presenting Sandy Connect, our internal company assistant and collaboration hub. The goal of Sandy Connect is to solve a common enterprise problem: finding the right person to help with a specific technology or access request, and instantly initiating contact. It bridges the gap between passive directories and active collaboration.">
+  <div class="eyebrow">The Collaborative Workplace Hub</div>
+  <h1 class="title"><span class="shutter"><span>Sandy&nbsp;Connect</span></span></h1>
+  <p class="lede" style="max-width:70ch">A unified internal portal combining AI-powered talent intelligence and peer-to-peer collaboration — eliminating organizational silos by helping employees find the right experts instantly and communicate with them in real time.</p>
+  <div class="grid3 mta" style="margin-top:28px">
+    <div class="card accent"><h3>The Vision</h3><p>One unified internal portal blending AI-powered talent intelligence with peer-to-peer collaboration.</p></div>
+    <div class="card"><h3>Core Value</h3><p>Eliminates organizational silos — find the right expert instantly and start the conversation in real time.</p></div>
+    <div class="card"><h3>Target System</h3><p>Integrated FastAPI backend, React/Vite frontend, SQLite data layer, and a local Ollama LLM.</p></div>
+  </div>
+  <div class="chips" style="margin-top:18px">
+    <span class="chip em">AI Q&amp;A</span><span class="chip em">Team Chat</span><span class="chip em">Hierarchy-aware</span><span class="chip em">Local-first</span>
+  </div>
+  <div class="slide-foot"><span>Slide 1 · The hub</span><span class="ln"></span><span>01 / 08</span></div>
+</section>
+
+<!-- 2 · Tech stack & architecture -->
+<section class="slide" data-notes="Let's look at the technical architecture. We've built a robust, fully-functioning local stack. The frontend is built on React, TypeScript, and Vite, leveraging Tailwind CSS for premium glassmorphic styling. The backend is FastAPI, which manages routing to our SQLite database. For LLM processing, we integrate directly with Ollama running Mistral locally. This ensures all corporate data remains strictly within local boundaries during our prototype phases.">
+  <div class="eyebrow">02 · Tech stack &amp; system architecture</div>
+  <h2 class="section">A <span class="em">local-first</span> stack, fully wired end-to-end</h2>
+  <div class="arch mta" style="margin-top:24px">
+    <div class="box">
+      <h3>Frontend</h3>
+      <ul class="clean">
+        <li><b>React + TypeScript</b> powered by <b>Vite</b></li>
+        <li>Styled with <b>Tailwind CSS v4</b> + glassmorphism</li>
+        <li><b>Framer Motion</b> for smooth transitions</li>
+        <li>Auth, messaging, employees &amp; notifications UI</li>
+      </ul>
+    </div>
+    <div class="mid">
+      <div class="pill">REST API</div>
+      <div style="color:var(--dim);font-size:18px">⇄</div>
+      <div class="pill">JSON / JWT</div>
+    </div>
+    <div class="box">
+      <h3>Backend</h3>
+      <ul class="clean">
+        <li><b>FastAPI</b> high-performance Python REST API</li>
+        <li>Endpoints: Auth, Messaging, Employees, Notifications</li>
+        <li>Routes to <b>SQLite</b> (<span class="mono">sandy_connect.db</span>)</li>
+        <li><b>Ollama (Mistral)</b> for semantic interpretation</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid4 mta" style="margin-top:18px">
+    <div class="card"><h3>Frontend</h3><div class="chips"><span class="chip em">React</span><span class="chip em">TypeScript</span><span class="chip em">Vite</span><span class="chip em">Tailwind v4</span><span class="chip v">Framer Motion</span></div></div>
+    <div class="card"><h3>Backend</h3><div class="chips"><span class="chip em">FastAPI</span><span class="chip em">Pydantic</span><span class="chip em">SQLAlchemy</span><span class="chip em">bcrypt</span><span class="chip em">JWT</span></div></div>
+    <div class="card"><h3>Storage</h3><div class="chips"><span class="chip em">SQLite</span><span class="chip">10 tables</span><span class="chip">auto-seeded</span></div></div>
+    <div class="card"><h3>LLM</h3><div class="chips"><span class="chip em">Ollama</span><span class="chip em">Mistral</span><span class="chip">offline fallback</span></div></div>
+  </div>
+  <div class="slide-foot"><span>Slide 2 · Architecture</span><span class="ln"></span><span>02 / 08</span></div>
+</section>
+
+<!-- 3 · AI talent discovery pipeline -->
+<section class="slide" data-notes="The core of our assistant is the AI Talent Discovery pipeline. When a user asks Sandy a question, the Request Analyser uses Ollama to extract the intent and required skills. Then, the Context Builder does a token-overlap and keyword search against corporate responsibility topics in SQLite. The Recommendation Engine scores candidates, considering department matches and seniority level guidelines to avoid overwhelming executives. Finally, the Answer Generator creates a clear response.">
+  <div class="eyebrow">03 · AI-powered talent discovery</div>
+  <h2 class="section">From a question to a <span class="em">grounded recommendation</span></h2>
+  <div class="flow mta" style="margin-top:26px">
+    <div class="node"><b>User Query</b><span>"Who knows about Kubernetes?"</span></div>
+    <div class="arr">➡</div>
+    <div class="node"><b>Request Analyser</b><span>Ollama parses intent, topic &amp; skills</span></div>
+    <div class="arr">➡</div>
+    <div class="node"><b>Context Builder</b><span>SQLite token-overlap match on responsibility topics</span></div>
+    <div class="arr">➡</div>
+    <div class="node"><b>Recommendation Engine</b><span>hierarchy-aware scoring</span></div>
+    <div class="arr">➡</div>
+    <div class="node"><b>Answer Generator</b><span>Ollama synthesizes the response</span></div>
+    <div class="arr">➡</div>
+    <div class="node acc"><b>Recommendations</b><span>ranked experts + reasoning</span></div>
+  </div>
+  <div class="grid2" style="margin-top:18px">
+    <div class="card"><h3>How matching works</h3><ul class="clean">
+      <li><b>Natural-language parsing</b> — LLM extracts intent, topic &amp; required skills</li>
+      <li><b>SQLite token-overlap match</b> — queries responsibility topics, maps primary / backup contacts</li>
+    </ul></div>
+    <div class="card accent"><h3>Hierarchy-aware scoring</h3><ul class="clean">
+      <li>Ranks experts by <b>department, seniority-level matching &amp; feedback loops</b></li>
+      <li>Escalation boundaries avoid overwhelming executives</li>
+      <li><b>Intelligent response</b> — Ollama presents recommendations with logical explanations</li>
+    </ul></div>
+  </div>
+  <div class="slide-foot"><span>Slide 3 · Discovery pipeline</span><span class="ln"></span><span>03 / 08</span></div>
+</section>
+
+<!-- 4 · Peer-to-peer DM -->
+<section class="slide" data-notes="Beyond Q&A, we have implemented a full Peer-to-Peer Direct Messaging workspace. Users can search the directory and start direct chats. The sidebar sorts conversations dynamically, placing active threads with the latest timestamps at the top. We've also added green indicators that show unread message counts, which instantly clear when you click into the conversation.">
+  <div class="eyebrow">04 · Peer-to-peer direct messaging</div>
+  <h2 class="section">A real-time <span class="em">workspace chat</span></h2>
+  <div class="grid2 mta" style="margin-top:22px">
+    <div class="mock">
+      <div class="top">Direct Messages</div>
+      <div class="body">
+        <div class="side">
+          <div class="conv on"><span class="av">AM</span>Aryan<span class="badge">2</span></div>
+          <div class="conv"><span class="av">PN</span>Priya<span class="badge">1</span></div>
+          <div class="conv"><span class="av">RM</span>Ravi</div>
+          <div class="conv"><span class="av">MS</span>Meera</div>
+          <div class="conv"><span class="av">KB</span>Karan</div>
+        </div>
+        <div class="thread">
+          <div class="b in">Hey — quick question on the AWS access request 👋</div>
+          <div class="b out">Sure! Priya Nair owns that. Want an intro?</div>
+          <div class="b in">Yes please 🙏</div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h3>Real-time workspace chat</h3><p>Direct message exchanges between colleagues logged into Sandy Connect, with live message storage.</p></div>
+      <div class="card"><h3>Time-sorted conversations</h3><p>Chat history dynamically updates the sidebar, placing the most recent chats on top.</p></div>
+      <div class="card accent"><h3>Unread indicators &amp; instant clearing</h3><p>Clear green badges show pending message counts; clicking a conversation instantly clears unread status and hides the badge.</p></div>
+    </div>
+  </div>
+  <div class="slide-foot"><span>Slide 4 · Direct messaging</span><span class="ln"></span><span>04 / 08</span></div>
+</section>
+
+<!-- 5 · Toasts & notifications -->
+<section class="slide" data-notes="To ensure users never miss critical messages while focusing on other tasks, we built an In-App Toast Alert system. If you receive a message from 'Priya' while chatting with 'Aryan', a floating toast slides in at the bottom-right. Clicking it takes you directly to Priya's chat thread. If ignored, it smoothly slides away after 5 seconds.">
+  <div class="eyebrow">05 · Live notifications &amp; floating toasts</div>
+  <h2 class="section">Never miss a message — <span class="em">without the noise</span></h2>
+  <div class="grid2 mta" style="margin-top:22px">
+    <div class="toast-mock">
+      <div class="lbl">Active chat: Aryan</div>
+      <div class="toast">
+        <div class="h"><span class="d"></span>New message · Priya Nair</div>
+        <div class="t">"Hi! Can you review the Zoho access request when you get a sec?"</div>
+        <div class="btn">Open conversation →</div>
+      </div>
+    </div>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h3>In-app toast alerts</h3><p>Floating slide-in toasts appear when new DMs arrive from colleagues outside the user's active viewport.</p></div>
+      <div class="card"><h3>One-click navigation</h3><p>Clicking a toast immediately redirects the user to that specific conversation.</p></div>
+      <div class="card"><h3>Auto-expire system</h3><p>Toasts auto-dismiss after 5 seconds to keep the workspace clean and clutter-free.</p></div>
+      <div class="card accent"><h3>Notification history log</h3><p>Outgoing notifications are logged in <span class="mono">outgoing_notifications</span> to track delivery.</p></div>
+    </div>
+  </div>
+  <div class="slide-foot"><span>Slide 5 · Toasts &amp; notifications</span><span class="ln"></span><span>05 / 08</span></div>
+</section>
+
+<!-- 6 · Self-service profiles -->
+<section class="slide" data-notes="Sandy Connect empowers employees to keep their information accurate. We implemented a glassmorphic profile modal where employees can edit their own profiles. They can change their department, location, skills, projects, and bio. Once saved, it writes to the SQLite database and instantly updates the UI state. This ensures our AI recommendation engine is always querying up-to-date skills.">
+  <div class="eyebrow">06 · Self-service employee profiles</div>
+  <h2 class="section">Employees keep their own <span class="em">expertise current</span></h2>
+  <div class="grid2 mta" style="margin-top:22px">
+    <div class="profile-mock">
+      <div class="h"><span class="av">RM</span><div><b>Ravi Menon</b><span>Lead DevOps Engineer · L8</span></div></div>
+      <div class="field"><label>Department</label><div class="val">Cloud Infrastructure</div></div>
+      <div class="field"><label>Location</label><div class="val">Bengaluru, IN</div></div>
+      <div class="field"><label>Skills</label><div class="tags"><span>AWS</span><span>Kubernetes</span><span>Terraform</span><span>ADO</span></div></div>
+      <div class="field"><label>Bio</label><div class="val" style="font-size:11.5px;color:var(--muted)">DevOps lead — owns Azure DevOps &amp; access requests…</div></div>
+    </div>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h3>Self-service center</h3><p>Logged-in users can view and edit their location, designation, department, skills, and bio.</p></div>
+      <div class="card"><h3>Interactive editor modal</h3><p>Built using clean Radix / Base-UI overlays — add or remove tags and update text fields.</p></div>
+      <div class="card accent"><h3>Live state synchronization</h3><p>Changes write to SQLite and immediately reflect across the app without reloading.</p></div>
+      <div class="card"><h3>Directory integration</h3><p>Updates instantly alter how the employee is indexed and recommended in the AI expert loop.</p></div>
+    </div>
+  </div>
+  <div class="slide-foot"><span>Slide 6 · Profiles</span><span class="ln"></span><span>06 / 08</span></div>
+</section>
+
+<!-- 7 · Org hierarchy tree -->
+<section class="slide" data-notes="Here is our Company Hierarchy page. It visualizes the reporting structure of the company. It starts at the top with the CTO, Dev Malhotra, and branches down to heads of business units, managers, and analysts. We use Framer Motion for smooth, clean rendering. This helps employees understand the escalations and reporting lines within the organization.">
+  <div class="eyebrow">07 · Org hierarchy tree</div>
+  <h2 class="section">Reporting chains, <span class="em">visualized</span></h2>
+  <div class="grid2 mta" style="margin-top:22px">
+    <div class="tree-mock">
+      <div class="tnode"><div class="tcard"><b>Dev Malhotra</b><span>CTO · L16</span></div></div>
+      <div class="tline"></div>
+      <div class="trow">
+        <div class="tnode"><div class="tcard"><b>Grace F.</b><span>Head of Corporate · L14</span></div><div class="tline"></div>
+          <div class="trow"><div class="tnode"><div class="tcard"><b>Nisha V.</b><span>Marketing · L8</span></div></div></div>
+        </div>
+        <div class="tnode"><div class="tcard"><b>Anudit S.</b><span>Assoc. Mgr · L12</span></div><div class="tline"></div>
+          <div class="trow"><div class="tnode"><div class="tcard"><b>Aryan M.</b><span>Analyst · L2</span></div></div><div class="tnode"><div class="tcard"><b>Priya N.</b><span>Consultant · L6</span></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h3>Visual reporting chains</h3><p>Interactive tree showing reporting chains from CTO down to individual contributors.</p></div>
+      <div class="card"><h3>Framer Motion animations</h3><p>Nodes expand and transition smoothly to improve navigation readability.</p></div>
+      <div class="card"><h3>Seeded corporate structure</h3><p>Currently visualizes the hierarchy built across the <b>15 mock employees</b>.</p></div>
+      <div class="card accent"><h3>Summary metrics</h3><p>Header shows key operational numbers — departments represented, levels, and team size.</p></div>
+    </div>
+  </div>
+  <div class="slide-foot"><span>Slide 7 · Hierarchy</span><span class="ln"></span><span>07 / 08</span></div>
+</section>
+
+<!-- 8 · Roadmap & gaps -->
+<section class="slide" data-notes="To conclude, let's look at the remaining gaps and our roadmap. While our current implementation proves the UI flows, messaging, and LLM orchestration, we have several items to address before a production launch. We will seed the database with the full 450 generated employees, integrate ChromaDB for vector-based semantic search, migrate SQLite to PostgreSQL, and finally, integrate with Microsoft Teams. This will complete the transition from a standalone prototype to an enterprise-wide tool. Thank you, and I am happy to take any questions.">
+  <div class="eyebrow">08 · Roadmap &amp; gaps to production</div>
+  <h2 class="section">From prototype to <span class="em">enterprise-wide</span></h2>
+  <div class="grid2 mta" style="margin-top:26px">
+    <div class="card accent"><h3>Implemented core</h3>
+      <ul class="clean check">
+        <li><b>AI talent discovery</b> pipeline (Ollama + SQLite match)</li>
+        <li><b>Hierarchy-aware ranking</b> &amp; grounded answers</li>
+        <li><b>Peer-to-peer messaging</b> with unread badges</li>
+        <li><b>Floating toasts</b> &amp; notification logging</li>
+        <li><b>Self-service profiles</b> with live sync</li>
+        <li><b>Auth (JWT + bcrypt)</b> &amp; org hierarchy tree</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Next steps / production migration</h3>
+      <ul class="clean open">
+        <li><b>Seed full scale</b> — seed SQLite with the full <b>450-employee</b> pool (generator exists, needs DB integration)</li>
+        <li><b>Vector database migration</b> — move keyword/token search to <b>ChromaDB</b> for true semantic-vector search</li>
+        <li><b>Enterprise DB integration</b> — migrate SQLite to <b>PostgreSQL</b> for durability &amp; concurrency</li>
+        <li><b>Teams &amp; Sandy Bot integration</b> — ship the standalone prototype into <b>Microsoft Teams</b> as an official corporate bot</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-foot"><span>Slide 8 · Roadmap</span><span class="ln"></span><span>Thank you · questions?</span></div>
+</section>
+
+</div>
+
+<div class="nav">
+  <button id="prev" title="Previous (←)">‹</button>
+  <div class="dots" id="dots"></div>
+  <span class="counter"><b id="cur">1</b> / <span id="total">1</span></span>
+  <button id="next" title="Next (→)">›</button>
+</div>
+<div class="fs">← → navigate · F fullscreen · S speaker notes</div>
+
+<div id="notes">
+  <div class="nl">Speaker notes · Slide <span id="notes-num">1</span></div>
+  <div class="nt" id="notes-text">—</div>
+</div>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const total=slides.length;
+  let i=0;
+  const dots=document.getElementById('dots');
+  const cur=document.getElementById('cur');
+  document.getElementById('total').textContent=total;
+  slides.forEach((_,n)=>{const d=document.createElement('i');d.onclick=()=>go(n);dots.appendChild(d)});
+  const dotEls=[...dots.children];
+  const notesText=document.getElementById('notes-text');
+  const notesNum=document.getElementById('notes-num');
+  function render(){
+    slides.forEach((s,n)=>s.classList.toggle('active',n===i));
+    dotEls.forEach((d,n)=>d.classList.toggle('on',n===i));
+    cur.textContent=i+1;
+    notesText.textContent=slides[i].dataset.notes||'—';
+    notesNum.textContent=i+1;
+  }
+  function go(n){i=Math.max(0,Math.min(total-1,n));render()}
+  document.getElementById('prev').onclick=()=>go(i-1);
+  document.getElementById('next').onclick=()=>go(i+1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();go(i+1)}
+    else if(e.key==='ArrowLeft'){e.preventDefault();go(i-1)}
+    else if(e.key==='Home'){go(0)} else if(e.key==='End'){go(total-1)}
+    else if(e.key==='f'||e.key==='F'){toggleFs()}
+    else if(e.key==='s'||e.key==='S'){document.body.classList.toggle('notes-on')}
+  });
+  function toggleFs(){if(!document.fullscreenElement){document.documentElement.requestFullscreen?.()}else{document.exitFullscreen?.()}}
+  document.querySelectorAll('.shutter span').forEach((s,n)=>s.style.animationDelay=(n*0.06)+'s');
+  render();
+})();
+</script>
+</body>
+</html>

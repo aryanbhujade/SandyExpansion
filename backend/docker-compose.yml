@@ -1,0 +1,37 @@
+# Local PostgreSQL for Sandy Connect (Step 1 of the Postgres migration).
+#
+# Run from this directory:
+#     docker compose up -d        # start Postgres
+#     docker compose ps           # check health
+#     docker compose stop         # stop (data kept in the volume)
+#     docker compose down         # stop + remove containers (volume kept)
+#     docker compose down -v      # stop + WIPE the database volume (fresh start)
+#
+# Connection string used by the backend (.env):
+#     postgresql+psycopg://sandy:sandy@localhost:5433/sandy_connect
+# (Host port is 5433 because 5432 was already in use on the dev machine;
+#  the container still listens on 5432 internally.)
+#
+# Dev-only credentials. Do NOT use these in a shared/production deployment.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: sandy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sandy
+      POSTGRES_PASSWORD: sandy
+      POSTGRES_DB: sandy_connect
+    ports:
+      - "5433:5432"
+    volumes:
+      - sandy_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sandy -d sandy_connect"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  sandy_pgdata:

@@ -14,6 +14,13 @@ __pycache__/
 *.egg-info/
 .eggs/
 
+# Python test / coverage caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
 # Virtual environments
 .venv/
 venv/

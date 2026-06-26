@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, create_engine, event, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, TypeDecorator, create_engine, event, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
@@ -26,7 +28,45 @@ if DATABASE_URL.startswith("sqlite"):
 
 
 def utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
+
+
+class JsonbText(TypeDecorator):
+    """JSON stored as native JSONB on PostgreSQL, plain TEXT on SQLite.
+
+    The rest of the app treats these columns as JSON-encoded *strings*
+    (services write json.dumps(...) and read json.loads(...)). This decorator
+    keeps that contract unchanged while storing native JSONB on Postgres:
+      - bind: a JSON string from the service is decoded to a Python object
+        before being sent to the JSONB column.
+      - result: the Python object returned from JSONB is re-encoded to a JSON
+        string so the service's json.loads(...) keeps working.
+    """
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            if isinstance(value, str):
+                return json.loads(value)
+            return value
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            if not isinstance(value, str):
+                return json.dumps(value)
+            return value
+        return value
 
 
 class Employee(Base):
@@ -60,12 +100,12 @@ class EmployeeProfile(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(String, ForeignKey("employees.id"), nullable=False, unique=True, index=True)
-    skills_json = Column(Text, nullable=False, default="[]")
-    expertise_topics_json = Column(Text, nullable=False, default="[]")
-    projects_json = Column(Text, nullable=False, default="[]")
+    skills_json = Column(JsonbText(), nullable=False, default="[]")
+    expertise_topics_json = Column(JsonbText(), nullable=False, default="[]")
+    projects_json = Column(JsonbText(), nullable=False, default="[]")
     notes = Column(Text, nullable=True)
     confidence_score = Column(Float, nullable=False, default=0.8)
-    last_updated = Column(DateTime, nullable=False, default=utcnow)
+    last_updated = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 class ResponsibilityTopic(Base):
@@ -73,7 +113,7 @@ class ResponsibilityTopic(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     topic = Column(String, nullable=False, unique=True, index=True)
-    keywords_json = Column(Text, nullable=False, default="[]")
+    keywords_json = Column(JsonbText(), nullable=False, default="[]")
     primary_contact_id = Column(String, ForeignKey("employees.id"), nullable=True)
     backup_contact_id = Column(String, ForeignKey("employees.id"), nullable=True)
     knowledge_summary = Column(Text, nullable=True)
@@ -96,7 +136,7 @@ class ChatMessage(Base):
     message = Column(Text, nullable=False)
     bot_response = Column(Text, nullable=False)
     detected_topic = Column(String, nullable=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 class Recommendation(Base):
@@ -112,7 +152,7 @@ class Recommendation(Base):
     score = Column(Float, nullable=False)
     reason = Column(Text, nullable=True)
     recommendation_type = Column(String, nullable=False, default="first_contact")
-    created_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 class RecommendationFeedback(Base):
@@ -124,7 +164,7 @@ class RecommendationFeedback(Base):
     rating = Column(Integer, nullable=True)
     correct_employee_name = Column(String, nullable=True)
     feedback_text = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 class ContactRequest(Base):
@@ -148,10 +188,10 @@ class ContactRequest(Base):
     notification_channel = Column(String, nullable=False, default="chat")
     notification_message = Column(Text, nullable=False)
     direct_message_id = Column(Integer, ForeignKey("direct_messages.id"), nullable=True)
-    notified_at = Column(DateTime, nullable=True)
-    fulfilled_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow)
+    notified_at = Column(DateTime(timezone=True),nullable=True)
+    fulfilled_at = Column(DateTime(timezone=True),nullable=True)
+    created_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
+    updated_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 class OutgoingNotification(Base):
@@ -168,9 +208,9 @@ class OutgoingNotification(Base):
     subject = Column(String, nullable=False)
     body = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="sent_chat", index=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    sent_at = Column(DateTime, nullable=True)
-    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True),nullable=False, default=utcnow)
+    sent_at = Column(DateTime(timezone=True),nullable=True)
+    read_at = Column(DateTime(timezone=True),nullable=True)
 
 
 class DirectMessage(Base):
@@ -185,7 +225,7 @@ class DirectMessage(Base):
     receiver_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
     message = Column(Text, nullable=False)
     read = Column(Boolean, nullable=False, default=False)
-    timestamp = Column(DateTime, nullable=False, default=utcnow)
+    timestamp = Column(DateTime(timezone=True),nullable=False, default=utcnow)
 
 
 def _ensure_sqlite_column(table_name: str, column_name: str, column_definition: str) -> None:

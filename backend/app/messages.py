@@ -39,7 +39,7 @@ def get_active_conversations(current_user: dict = Depends(get_current_user_dep),
     all_dms = db.query(DirectMessage).filter(
         or_(DirectMessage.sender_id == my_id, DirectMessage.receiver_id == my_id)
     ).order_by(DirectMessage.timestamp.asc()).all()
-    
+
     conversations = {}
     for dm in all_dms:
         colleague_id = dm.receiver_id if dm.sender_id == my_id else dm.sender_id
@@ -49,6 +49,20 @@ def get_active_conversations(current_user: dict = Depends(get_current_user_dep),
             "sender_id": dm.sender_id,
             "read": dm.read
         }
+
+    # Enrich each entry with the colleague's profile so the frontend sidebar can
+    # render names/roles without an extra N+1 lookup per conversation.
+    colleague_ids = list(conversations.keys())
+    if colleague_ids:
+        colleagues = db.query(Employee).filter(Employee.id.in_(colleague_ids)).all()
+        for emp in colleagues:
+            entry = conversations.get(emp.id)
+            if entry is None:
+                continue
+            entry["name"] = emp.name
+            entry["role"] = emp.role
+            entry["department"] = emp.department
+            entry["level"] = emp.level
     return conversations
 
 @router.get("/unread/count")

@@ -1,13 +1,40 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-from app.database import Employee, EmployeeProfile, ResponsibilityTopic, SessionLocal, init_db, utcnow
+import bcrypt
+
+from app.database import (
+    Employee,
+    EmployeeProfile,
+    ResponsibilityTopic,
+    SessionLocal,
+    UserCredential,
+    init_db,
+    utcnow,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SEED_FILE = BACKEND_ROOT / "data" / "seed_employees.json"
+# The 450-employee synthetic dataset (ids E016..E465) layered on top of the
+# curated 15-set. Auto-seeded on backend startup when absent (see main.py).
+EXTRA_SEED_FILE = BACKEND_ROOT / "data" / "seed_employees_450.json"
+
+DEFAULT_PASSWORD = "Password123!"
+ADMIN_EMAIL_ENV = "SANDY_ADMIN_EMAIL"
+DEFAULT_ADMIN_EMAIL = "dev.malhotra@example.com"
+
+
+def _admin_email() -> str:
+    return os.getenv(ADMIN_EMAIL_ENV, DEFAULT_ADMIN_EMAIL).strip().lower()
+
+
+def get_password_hash(password: str) -> str:
+    """bcrypt-hash a plaintext password for credential storage."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 RESPONSIBILITY_TOPICS: list[dict[str, Any]] = [
@@ -161,6 +188,63 @@ def seed_database(db) -> dict[str, int]:
         "employee_profiles": len(employees),
         "responsibility_topics": len(RESPONSIBILITY_TOPICS),
     }
+
+
+def seed_extra_employees(db) -> dict[str, int]:
+    """Layer the 450-employee synthetic dataset (E016..E465) on top of the
+    curated 15-set, including profiles and login credentials.
+
+    Idempotent: safe to re-run. Upserts employees/profiles and only creates
+    credentials for employees that don't yet have one (existing passwords are
+    never reset). Responsibility topics are NOT touched here (the 9 curated
+    topics stay valid against E001..E013).
+
+    No-op (returns zero counts) when the 450 seed file is absent, so a
+    checkout without the synthetic dataset still boots the 15-set normally.
+
+    Returns counts of employees upserted and credentials created this run.
+    """
+    if not EXTRA_SEED_FILE.exists():
+        return {"extra_employees": 0, "extra_credentials_created": 0}
+
+    rows = json.loads(EXTRA_SEED_FILE.read_text(encoding="utf-8"))
+    admin_email = _admin_email()
+
+    # 1) Upsert employees — two-pass so manager_id self-FKs resolve.
+    for item in rows:
+        _upsert_employee(db, item, include_manager=False)
+    db.flush()
+    for item in rows:
+        employee = db.get(Employee, item["id"])
+        if employee is not None:
+            employee.manager_id = item.get("manager_id")
+        _upsert_profile(db, item)
+
+    # 2) Upsert credentials (default password). Admin stays with the 15-set's
+    #    dev.malhotra; these rows are is_admin=False unless one of them happens
+    #    to match the configured admin email, in which case promote it.
+    hashed = get_password_hash(DEFAULT_PASSWORD)
+    created_credentials = 0
+    for item in rows:
+        email = item["email"].strip().lower()
+        existing = db.query(UserCredential).filter(
+            UserCredential.employee_id == item["id"]
+        ).first()
+        if existing is None:
+            db.add(
+                UserCredential(
+                    employee_id=item["id"],
+                    email=email,
+                    hashed_password=hashed,
+                    is_admin=(email == admin_email),
+                )
+            )
+            created_credentials += 1
+        elif email == admin_email and not existing.is_admin:
+            existing.is_admin = True
+
+    db.commit()
+    return {"extra_employees": len(rows), "extra_credentials_created": created_credentials}
 
 
 def main() -> None:

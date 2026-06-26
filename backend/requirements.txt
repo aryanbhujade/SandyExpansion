@@ -9,3 +9,7 @@ bcrypt
 python-multipart
 dotenv
 ollama
+# PostgreSQL driver (local dev DB via docker-compose.yml)
+psycopg[binary]
+# Database migrations
+alembic

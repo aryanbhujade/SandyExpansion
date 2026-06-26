@@ -17,6 +17,7 @@ from app.database import (
     RecommendationFeedback,
     SessionLocal,
     UserCredential,
+    engine,
     get_db,
     init_db,
     utcnow,
@@ -32,7 +33,7 @@ from app.services.feedback_service import recommendation_id_for_contact_request,
 from app.services.local_llm import get_llm_settings
 from app.services.recommendation_engine import recommend_contacts
 from app.services.request_analyser import analyse_user_request
-from app.services.seed_data import seed_database
+from app.services.seed_data import seed_database, seed_extra_employees
 from app.auth import get_current_user_dep, require_admin_dep, router as auth_router
 from app.messages import router as messages_router
 from app.employees import router as employees_router
@@ -134,11 +135,25 @@ def on_startup() -> None:
 
     session = SessionLocal()
     try:
+        # 1) Curated 15-set (E001..E015): employees + 9 responsibility_topics.
         if session.query(Employee).count() == 0:
-            print("Sandy Connect database is empty. Auto-seeding...")
+            print("Sandy Connect database is empty. Auto-seeding curated 15-set...")
             seed_database(session)
         _seed_credentials_if_empty(session)
         _ensure_admin_credential(session)
+
+        # 2) Synthetic 450-set (E016..E465): layer on top ONLY when absent so a
+        #    restart never overwrites user-edited profiles, chats, or passwords.
+        #    Guard on E016 (the first synthetic id) rather than row count, so a
+        #    partially-seeded DB is topped up rather than skipped.
+        if session.query(Employee).filter(Employee.id == "E016").first() is None:
+            print("Synthetic 450-set (E016..E465) absent. Auto-seeding on top of the 15-set...")
+            counts = seed_extra_employees(session)
+            print(f"Auto-seeded {counts['extra_employees']} synthetic employees "
+                  f"({counts['extra_credentials_created']} new credentials). "
+                  f"Org total: {session.query(Employee).count()} employees.")
+        else:
+            print(f"Sandy Connect ready: {session.query(Employee).count()} employees in DB.")
     finally:
         session.close()
 
@@ -303,8 +318,8 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "llm_provider": "ollama",
-        "model": settings["model"],
-        "database": "sqlite",
+        "model": settings["model"] or "",
+        "database": str(engine.dialect.name),
     }
 
 

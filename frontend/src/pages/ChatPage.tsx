@@ -395,6 +395,65 @@ function NotificationPanel({
   );
 }
 
+// ==================== Sidebar Contact Row ====================
+
+function ContactRow({
+  name,
+  subtitle,
+  timestamp,
+  unreadCount,
+  active,
+  onClick,
+}: {
+  name: string;
+  subtitle: string;
+  timestamp?: string;
+  unreadCount?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <motion.div
+      layout
+      onClick={onClick}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
+        active
+          ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
+          : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <Avatar className="h-10 w-10 border border-white/10 bg-[#1d1d1f]">
+          <AvatarFallback className="bg-transparent text-zinc-300 text-sm">
+            {name.charAt(0)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <h1 className="text-sm font-medium tracking-tight text-zinc-200 truncate">
+              {name}
+            </h1>
+            {timestamp && (
+              <span className="text-[10px] text-zinc-500 shrink-0">
+                {formatRelativeTime(timestamp)}
+              </span>
+            )}
+          </div>
+          <p className={`text-xs truncate ${(unreadCount ?? 0) > 0 ? 'text-zinc-200 font-semibold font-bold' : 'text-zinc-500'}`}>
+            {subtitle}
+          </p>
+        </div>
+        {(unreadCount ?? 0) > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-black shrink-0">
+            {unreadCount}
+          </span>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ==================== Main ChatPage ====================
 
 export default function ChatPage() {
@@ -418,11 +477,17 @@ export default function ChatPage() {
   const forceNextScrollRef = useRef(false);
   
   const [activeChat, setActiveChat] = useState<string>('bot');
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
   const [directMessagesLoading, setDirectMessagesLoading] = useState(false);
   const [directMessageError, setDirectMessageError] = useState('');
   const [isSendingDirectMessage, setIsSendingDirectMessage] = useState(false);
+
+  // Teams-style sidebar: we never load all 465 employees. The sidebar shows the
+  // bot + the user's active conversations; a search bar looks people up on demand.
+  const [colleagueMap, setColleagueMap] = useState<Record<string, Employee>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Employee[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Notification state
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -456,22 +521,47 @@ export default function ChatPage() {
     viewport.scrollTo({ top: viewport.scrollHeight, behavior });
   }, []);
 
-  // Fetch employees (exclude logged-in user)
+  // On-demand people search for the sidebar search bar (debounced). We never
+  // load all employees — only matches for the current query, capped at 20.
   useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const handle = setTimeout(() => {
+      employeeApi.list({ search: query, limit: 20 })
+        .then(data => {
+          const filtered = user
+            ? data.filter(emp => emp.employee_id !== user.employee_id)
+            : data;
+          setSearchResults(filtered);
+          setColleagueMap(prev => {
+            const next = { ...prev };
+            filtered.forEach(emp => { next[emp.employee_id] = emp; });
+            return next;
+          });
+        })
+        .catch(() => setSearchResults([]))
+        .finally(() => setIsSearching(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchQuery, user]);
+
+  // Ensure we have profile info for whoever the user is currently chatting with
+  // (e.g. opened from search before any message exists, so no active conversation).
+  useEffect(() => {
+    if (activeChat === 'bot' || colleagueMap[activeChat]) return;
     let cancelled = false;
-    employeeApi.list({ limit: 100 })
-      .then(data => {
-        if (!cancelled && user) {
-          setEmployees(data.filter(emp => emp.employee_id !== user.employee_id));
-        }
+    employeeApi.getById(activeChat)
+      .then(emp => {
+        if (!cancelled) setColleagueMap(prev => ({ ...prev, [activeChat]: emp }));
       })
-      .catch(() => {
-        if (!cancelled) setEmployees([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
+      .catch(() => { /* colleague may have been removed */ });
+    return () => { cancelled = true; };
+  }, [activeChat, colleagueMap]);
 
   const fetchConversationsAndUnread = useCallback(async (isInitial = false) => {
     try {
@@ -479,20 +569,43 @@ export default function ChatPage() {
         messageApi.getActiveConversations(),
         messageApi.getUnreadCounts()
       ]);
-      
+
       setActiveConversations(convData);
       setUnreadCounts(unreadData);
-      
-      // If this is not the initial load, check for new incoming messages to show notifications
+
+      // Cache the colleague profile info the backend enriched into the response
+      // so sidebar rows / DM headers can render without extra lookups.
+      setColleagueMap(prev => {
+        let changed = false;
+        const next = { ...prev };
+        Object.entries(convData).forEach(([id, conv]) => {
+          if (!conv.name) return;
+          const existing = next[id];
+          if (!existing || existing.name !== conv.name) {
+            next[id] = {
+              ...existing,
+              employee_id: id,
+              name: conv.name,
+              role: conv.role ?? existing?.role ?? '',
+              department: conv.department ?? existing?.department ?? '',
+              level: conv.level ?? existing?.level ?? '',
+            };
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      // If this is not the initial load, surface toasts for freshly-arrived
+      // incoming messages in conversations the user isn't currently viewing.
       if (!isInitial) {
         Object.entries(convData).forEach(([colleagueId, conv]) => {
           const prevConv = prevConversationsRef.current[colleagueId];
           const isNewMessage = !prevConv || prevConv.timestamp !== conv.timestamp;
-          
+
           if (isNewMessage && conv.sender_id === colleagueId && colleagueId !== activeChatRef.current) {
-            const sender = employees.find(e => e.employee_id === colleagueId);
-            const senderName = sender ? sender.name : 'Someone';
-            
+            const senderName = conv.name || 'Someone';
+
             // Show toast notification
             setToasts(prev => [
               ...prev,
@@ -507,26 +620,22 @@ export default function ChatPage() {
           }
         });
       }
-      
+
       prevConversationsRef.current = convData;
     } catch (error) {
       console.error("Failed to fetch conversations and unread counts", error);
     }
-  }, [employees]);
+  }, []);
 
-  // Poll conversations and unread counts
+  // Poll conversations and unread counts (always on — the sidebar is driven by
+  // active conversations, not the full employee list).
   useEffect(() => {
-    if (employees.length === 0) return;
-    
-    // Fetch immediately
     void fetchConversationsAndUnread(true);
-    
     const interval = setInterval(() => {
       void fetchConversationsAndUnread(false);
     }, 5000);
-    
     return () => clearInterval(interval);
-  }, [employees, fetchConversationsAndUnread]);
+  }, [fetchConversationsAndUnread]);
 
   // Auto-dismiss toast notifications sequentially
   useEffect(() => {
@@ -768,9 +877,9 @@ export default function ChatPage() {
     ? messages.filter((message) => message.id !== 'welcome')
     : messages;
 
-  // Get active DM recipient info
+  // Get active DM recipient info (from enriched active conversations or the colleague cache).
   const activeDmRecipient = activeChat !== 'bot'
-    ? employees.find(e => e.employee_id === activeChat)
+    ? colleagueMap[activeChat]
     : null;
 
   const chatTitle = activeChat === 'bot'
@@ -791,18 +900,12 @@ export default function ChatPage() {
       ? `Message ${activeDmRecipient.name}...`
       : 'Type a message...';
 
-  // Sort employees: those with active conversations on top (latest first), then alphabetical
-  const sortedEmployees = [...employees].sort((a, b) => {
-    const convA = activeConversations[a.employee_id];
-    const convB = activeConversations[b.employee_id];
-    
-    if (convA && convB) {
-      return new Date(convB.timestamp).getTime() - new Date(convA.timestamp).getTime();
-    }
-    if (convA) return -1;
-    if (convB) return 1;
-    return a.name.localeCompare(b.name);
-  });
+  // Active conversations sorted latest-first for the sidebar DM list.
+  const sortedConversations = Object.entries(activeConversations)
+    .map(([id, conv]) => ({ id, ...conv }))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const trimmedSearch = searchQuery.trim();
 
   return (
     <div className="relative h-dvh overflow-hidden bg-[#0b0b0c] text-white">
@@ -865,52 +968,56 @@ export default function ChatPage() {
 
             <div className="mt-6">
               <p className="text-xs uppercase tracking-[0.28em] text-zinc-500 mb-3 px-2">Direct Messages</p>
+
+              {/* Search bar — looks people up on demand instead of loading all 465. */}
+              <div className="relative mb-3 px-2">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Input
+                  type="text"
+                  placeholder="Search people to message…"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="h-9 rounded-2xl border border-white/8 bg-white/[0.03] pl-9 pr-3 text-sm text-white placeholder:text-zinc-500 focus-visible:border-white/16"
+                />
+              </div>
+
               <div className="space-y-2">
-                {sortedEmployees.map((emp) => {
-                  const conv = activeConversations[emp.employee_id];
-                  const unreadCount = unreadCounts[emp.employee_id] || 0;
-                  return (
-                    <motion.div
-                      layout
-                      key={emp.employee_id}
-                      onClick={() => setActiveChat(emp.employee_id)}
-                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                      className={`rounded-[24px] border p-3 cursor-pointer transition-colors ${
-                        activeChat === emp.employee_id
-                          ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
-                          : 'border-white/4 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 border border-white/10 bg-[#1d1d1f]">
-                          <AvatarFallback className="bg-transparent text-zinc-300 text-sm">
-                            {emp.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <h1 className="text-sm font-medium tracking-tight text-zinc-200 truncate">
-                              {emp.name}
-                            </h1>
-                            {conv && (
-                              <span className="text-[10px] text-zinc-500 shrink-0">
-                                {formatRelativeTime(conv.timestamp)}
-                              </span>
-                            )}
-                          </div>
-                          <p className={`text-xs truncate ${unreadCount > 0 ? 'text-zinc-200 font-semibold font-bold' : 'text-zinc-500'}`}>
-                            {conv ? conv.last_message : (emp.role || emp.department)}
-                          </p>
-                        </div>
-                        {unreadCount > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-black shrink-0">
-                            {unreadCount}
-                          </span>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                {trimmedSearch ? (
+                  isSearching && searchResults.length === 0 ? (
+                    <p className="px-3 text-xs text-zinc-500">Searching…</p>
+                  ) : searchResults.length === 0 ? (
+                    <p className="px-3 text-xs text-zinc-500">
+                      No matches. Try a name, role, or department.
+                    </p>
+                  ) : (
+                    searchResults.map((emp) => (
+                      <ContactRow
+                        key={emp.employee_id}
+                        name={emp.name}
+                        subtitle={emp.role || emp.department || 'Employee'}
+                        active={activeChat === emp.employee_id}
+                        onClick={() => setActiveChat(emp.employee_id)}
+                      />
+                    ))
+                  )
+                ) : sortedConversations.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-4 text-xs leading-5 text-zinc-500">
+                    No conversations yet. Search above to start a new chat — Sandy can
+                    also add people here when it routes a recommendation to you.
+                  </div>
+                ) : (
+                  sortedConversations.map((conv) => (
+                    <ContactRow
+                      key={conv.id}
+                      name={conv.name || colleagueMap[conv.id]?.name || 'Colleague'}
+                      subtitle={conv.last_message}
+                      timestamp={conv.timestamp}
+                      unreadCount={unreadCounts[conv.id] || 0}
+                      active={activeChat === conv.id}
+                      onClick={() => setActiveChat(conv.id)}
+                    />
+                  ))
+                )}
               </div>
             </div>
 
@@ -1187,7 +1294,8 @@ export default function ChatPage() {
                                             notificationState={notificationState}
                                             onNotify={() => {
                                               if (recommendationId !== undefined) {
-                                                confirmRecommendation(message.id, recommendationId);
+                                                void confirmRecommendation(message.id, recommendationId)
+                                                  .then(() => fetchConversationsAndUnread());
                                               }
                                             }}
                                             onFeedbackSubmit={(feedback) => {
@@ -1224,7 +1332,7 @@ export default function ChatPage() {
                       ) : (
                         directMessages.map((msg) => {
                           const isUser = msg.sender_id === user?.employee_id;
-                          const senderEmployee = !isUser ? employees.find(e => e.employee_id === msg.sender_id) : null;
+                          const senderEmployee = !isUser ? colleagueMap[msg.sender_id] : null;
                           return (
                             <motion.div
                               key={msg.id}

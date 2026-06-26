@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from pydantic import BaseModel
 import json
@@ -68,7 +69,12 @@ def get_employees(
         query = query.filter(Employee.location == location)
     if search:
         search_filter = f"%{search}%"
-        query = query.filter(Employee.name.ilike(search_filter))
+        query = query.filter(or_(
+            Employee.name.ilike(search_filter),
+            Employee.email.ilike(search_filter),
+            Employee.role.ilike(search_filter),
+            Employee.department.ilike(search_filter),
+        ))
     
     offset = (page - 1) * limit
     employees = query.order_by(Employee.name.asc()).offset(offset).limit(limit).all()

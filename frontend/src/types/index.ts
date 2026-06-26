@@ -188,6 +188,12 @@ export interface ActiveConversation {
   timestamp: string;
   sender_id: string;
   read: boolean;
+  // Enriched server-side so the sidebar can render a contact without an extra
+  // lookup. Present for active conversations; absent for brand-new search picks.
+  name?: string;
+  role?: string | null;
+  department?: string | null;
+  level?: string | null;
 }
 
 // ---------- Analytics (admin) ----------

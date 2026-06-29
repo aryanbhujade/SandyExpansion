@@ -71,6 +71,9 @@ function formatRelativeTime(dateStr: string) {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+
+  if (!Number.isFinite(diffMs)) return 'Just now';
+
   const diffMin = Math.floor(diffMs / 60000);
   const diffHrs = Math.floor(diffMin / 60);
   const diffDays = Math.floor(diffHrs / 24);
@@ -883,7 +886,7 @@ export default function ChatPage() {
     : null;
 
   const chatTitle = activeChat === 'bot'
-    ? 'Chat with InternBot'
+    ? 'Chat with Sandy Connect'
     : activeDmRecipient
       ? `Chat with ${activeDmRecipient.name}`
       : 'Direct Message';
@@ -895,7 +898,7 @@ export default function ChatPage() {
       : '';
 
   const inputPlaceholder = activeChat === 'bot'
-    ? 'Ask InternBot about skills, teams, or who can help next...'
+    ? 'Ask Sandy Connect about skills, teams, or who can help next...'
     : activeDmRecipient
       ? `Message ${activeDmRecipient.name}...`
       : 'Type a message...';
@@ -956,7 +959,7 @@ export default function ChatPage() {
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <h1 className="text-sm font-semibold tracking-tight text-white">
-                      InternBot
+                      Sandy Connect
                     </h1>
                     <p className="text-xs text-emerald-400/80 truncate">
                       Expert discovery & intelligence
@@ -1191,7 +1194,7 @@ export default function ChatPage() {
                           </h3>
                           <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
                             Search by technology, project context, mentorship needs, or domain expertise.
-                            InternBot keeps the conversation grounded in your team directory.
+                            Sandy Connect keeps the conversation grounded in your team directory.
                           </p>
 
                           <div className="mt-10 grid w-full max-w-3xl gap-3 md:grid-cols-2">
@@ -1249,7 +1252,7 @@ export default function ChatPage() {
 
                               <div className="min-w-0 flex-1">
                                 <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-zinc-500">
-                                  <span>{isUser ? 'You' : 'InternBot'}</span>
+                                  <span>{isUser ? 'You' : 'Sandy Connect'}</span>
                                   <span className="h-1 w-1 rounded-full bg-zinc-600" />
                                   <span>{formatTime(message.timestamp)}</span>
                                 </div>

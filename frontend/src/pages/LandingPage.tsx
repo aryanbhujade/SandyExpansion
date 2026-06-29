@@ -31,7 +31,7 @@ export default function LandingPage() {
   }
 
   const trustMetrics = [
-    { icon: <Users className="w-5 h-5" />, value: 450, suffix: "", label: "Employees" },
+    { icon: <Users className="w-5 h-5" />, value: 465, suffix: "", label: "Employees" },
     { icon: <Building className="w-5 h-5" />, value: 17, suffix: "", label: "Departments" },
     { icon: <GraduationCap className="w-5 h-5" />, value: 200, suffix: "+", label: "Skills" },
     { icon: <Network className="w-5 h-5" />, value: 18, suffix: "", label: "Org Levels" },
@@ -43,7 +43,7 @@ export default function LandingPage() {
     { icon: <Shield size={14} />, text: "Enterprise Ready" },
   ]
 
-  const descriptionText = "InternBot helps employees discover the best people across the organization for technologies, projects, mentorship, and domain expertise using AI-powered recommendations."
+  const descriptionText = "Sandy Connect helps employees discover the best people across the organization for technologies, projects, mentorship, and domain expertise using AI-powered recommendations."
 
   return (
     <div className="w-full min-h-screen bg-black font-sans">
@@ -74,7 +74,7 @@ export default function LandingPage() {
             <motion.div variants={itemVariants} className="flex items-center gap-3 mb-8">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-emerald-500/20 bg-emerald-950/30 backdrop-blur-md text-emerald-400 text-sm font-medium w-fit">
                 <BotMessageSquare className="w-4 h-4" />
-                <span>InternBot</span>
+                <span>Sandy Connect</span>
               </div>
               <Badge variant="outline" className="border-emerald-500/30 bg-emerald-950/20 text-emerald-400 text-xs rounded-full px-3 py-1 font-medium">
                 <Sparkles size={12} className="mr-1" />
@@ -120,7 +120,7 @@ export default function LandingPage() {
                 onClick={() => navigate('/signin')}
               >
                 <BotMessageSquare className="w-4 h-4 mr-2" />
-                <span>Ask InternBot</span>
+                <span>Ask Sandy</span>
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
 

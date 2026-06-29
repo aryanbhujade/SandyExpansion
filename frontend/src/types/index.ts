@@ -215,7 +215,7 @@ export interface AnalyticsSummary {
     average_rating: number;
     useful_percentage: number;
   };
-  top_topics: { topic: string; count: number }[];
+  top_topics: { rank: number; topic: string; count: number }[];
   recommendations_by_department: { department: string; count: number }[];
 }
 

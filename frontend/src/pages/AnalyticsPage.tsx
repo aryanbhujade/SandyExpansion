@@ -257,8 +257,9 @@ export default function AnalyticsPage() {
                 <div className="flex flex-wrap gap-2">
                   {summary.top_topics.map((t) => (
                     <span key={t.topic} className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-zinc-300">
-                      <span className="text-emerald-400 font-semibold">{t.count}</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold text-[10px]">#{t.rank}</span>
                       <span className="truncate max-w-[180px]">{t.topic}</span>
+                      <span className="text-zinc-500">({t.count})</span>
                     </span>
                   ))}
                 </div>

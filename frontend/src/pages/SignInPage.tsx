@@ -62,7 +62,7 @@ export default function SignInPage() {
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-white mb-2">Welcome Back</h1>
             <p className="text-sm text-zinc-400 text-center">
-              Sign in to InternBot to discover experts and connect with your team.
+              Sign in to Sandy Connect to discover experts and connect with your team.
             </p>
           </div>
 

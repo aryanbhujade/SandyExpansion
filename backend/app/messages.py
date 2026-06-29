@@ -45,7 +45,7 @@ def get_active_conversations(current_user: dict = Depends(get_current_user_dep),
         colleague_id = dm.receiver_id if dm.sender_id == my_id else dm.sender_id
         conversations[colleague_id] = {
             "last_message": dm.message,
-            "timestamp": dm.timestamp.isoformat() + "Z" if not dm.timestamp.isoformat().endswith("Z") else dm.timestamp.isoformat(),
+            "timestamp": dm.timestamp.isoformat().replace("+00:00", "Z"),
             "sender_id": dm.sender_id,
             "read": dm.read
         }

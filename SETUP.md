@@ -85,8 +85,7 @@ pip install -r requirements.txt
 Run the API server:
 
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
+ ./.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000```
 
 ### What happens on first launch (auto‑seed)
 

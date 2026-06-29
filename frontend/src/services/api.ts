@@ -27,7 +27,7 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const REQUESTER_ID = import.meta.env.VITE_DEFAULT_REQUESTER_ID || 'EMP0001';
-const TOKEN_KEY = 'internbot_token';
+const TOKEN_KEY = 'sandy_connect_token';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -68,7 +68,7 @@ export const authApi = {
 
 export const chatApi = {
   /**
-   * Send a message to the InternBot LLM agent.
+   * Send a message to the Sandy Connect LLM agent.
    * Returns structured recommendations from the backend.
    */
   async sendMessage(

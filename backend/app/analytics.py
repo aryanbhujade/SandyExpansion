@@ -66,15 +66,25 @@ def analytics_summary(
     )
 
     # Top requested topics (from chat_messages.detected_topic).
+    # Rank by total requests; break ties by most-recent request so the "top"
+    # order stays meaningful even when counts are equal.
     topic_rows = (
-        db.query(ChatMessage.detected_topic, func.count(ChatMessage.id))
+        db.query(
+            ChatMessage.detected_topic,
+            func.count(ChatMessage.id).label("topic_count"),
+            func.max(ChatMessage.created_at).label("latest_at"),
+        )
         .filter(ChatMessage.detected_topic.isnot(None))
         .group_by(ChatMessage.detected_topic)
-        .order_by(func.count(ChatMessage.id).desc())
+        .order_by(func.count(ChatMessage.id).desc(), func.max(ChatMessage.created_at).desc())
         .limit(5)
         .all()
     )
-    top_topics = [{"topic": name, "count": count} for name, count in topic_rows if name]
+    top_topics = [
+        {"rank": index + 1, "topic": name, "count": count}
+        for index, (name, count, _) in enumerate(topic_rows)
+        if name
+    ]
 
     # Recommendations distributed by recommended employee department.
     dept_rows = (

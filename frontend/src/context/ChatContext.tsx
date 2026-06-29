@@ -30,8 +30,8 @@ const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
 // ---------- Session persistence ----------
 
-const SESSION_KEY = 'internbot_session_id';
-const WELCOME_MESSAGE = 'Hello! I\'m InternBot 🤖 I can help you discover the right experts across your organization. Try asking me about specific technologies, projects, or skills!';
+const SESSION_KEY = 'sandy_connect_session_id';
+const WELCOME_MESSAGE = 'Hello! I\'m Sandy Connect 🤖 I can help you discover the right experts across your organization. Try asking me about specific technologies, projects, or skills!';
 
 function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
